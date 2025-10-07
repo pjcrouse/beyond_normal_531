@@ -544,19 +544,19 @@ struct ContentView: View {
                 }
                 .padding(.vertical)
             }
-        }
-        .navigationTitle("5/3/1 • Beyond Normal")
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    showHistory = true
-                } label: {
-                    Label("History", systemImage: "clock.arrow.circlepath")
+            .navigationTitle("5/3/1 • Beyond Normal")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showHistory = true
+                    } label: {
+                        Label("History", systemImage: "clock.arrow.circlepath")
+                    }
                 }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { showSettings = true } label: {
-                    Image(systemName: "gearshape")
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showSettings = true } label: {
+                        Image(systemName: "gearshape")
+                    }
                 }
             }
         }
