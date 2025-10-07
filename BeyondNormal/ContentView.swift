@@ -467,11 +467,16 @@ struct ContentView: View {
                         
                         // 🔹 Clear only the notes field - checkmarks remain
                         workoutNotes = ""
+                        // Optional: also stop any running timer
+                        resetTimer()
                         
                         // 👇 Auto-advance week if enabled
                         if autoAdvanceWeek {
                             currentWeek = currentWeek % 4 + 1
                         }
+                        
+                        // Optional: refresh text field backing var
+                        liveRepsText = repsText(for: selectedLift)
                         
                         showSavedAlert = true
                     } label: {
@@ -540,7 +545,7 @@ struct ContentView: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("This will clear all sets (main, BBB, assistance), AMRAP reps, and workout notes for \(selectedLift.label).")
+            Text("This will clear all sets (main, bbb, assistance), AMRAP reps, and workout notes.")
         }
         .alert("Saved!", isPresented: $showSavedAlert) {
             Button("OK", role: .cancel) { }
