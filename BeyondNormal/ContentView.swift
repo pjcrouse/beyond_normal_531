@@ -159,7 +159,9 @@ struct ContentView: View {
     
     @AppStorage("current_week") private var currentWeek: Int = 1 // 1..4
     
+    // Behavior
     @AppStorage("tm_progression_style") private var tmProgStyleRaw: String = "classic" // "classic" or "auto"
+    @AppStorage("auto_advance_week") private var autoAdvanceWeek: Bool = false
     
     // Notes related
     @State private var workoutNotes: String = ""
@@ -521,6 +523,20 @@ struct ContentView: View {
                             notes: workoutNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : workoutNotes
                         )
                         WorkoutStore.shared.append(entry)
+                        
+                        // 🔹 Clear only the notes field - checkmarks remain
+                        workoutNotes = ""
+                        // Optional: also stop any running timer
+                        resetTimer()
+                        
+                        // 👇 Auto-advance week if enabled
+                        if autoAdvanceWeek {
+                            currentWeek = currentWeek % 4 + 1
+                        }
+                        
+                        // Optional: refresh text field backing var
+                        liveRepsText = repsText(for: selectedLift)
+                        
                         showSavedAlert = true
                     } label: {
                         Label("Finish Workout", systemImage: "checkmark.seal.fill")
@@ -571,7 +587,8 @@ struct ContentView: View {
                 bbbPct: $bbbPct,
                 timerRegularSec: $timerRegularSec,
                 timerBBBsec: $timerBBBsec,
-                tmProgStyleRaw: $tmProgStyleRaw
+                tmProgStyleRaw: $tmProgStyleRaw,
+                autoAdvanceWeek: $autoAdvanceWeek
             )
             .presentationDetents([.medium, .large])
         }
@@ -583,7 +600,7 @@ struct ContentView: View {
             Button("Reset", role: .destructive) { resetCurrentLift() }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("This will clear 65/75/85 sets, BBB sets, assistance sets, AMRAP reps, and workout notes.")
+            Text("This will clear all sets (main, bbb, assistance), AMRAP reps, and workout notes.")
         }
         .alert("Saved!", isPresented: $showSavedAlert) {
             Button("OK", role: .cancel) { }
@@ -1273,6 +1290,14 @@ struct ContentView: View {
                         .onSubmit {
                             isFocused = false
                         }
+                        .toolbar {
+                            ToolbarItemGroup(placement: .keyboard) {
+                                Spacer()
+                                Button("Done") {
+                                    isFocused = false
+                                }
+                            }
+                        }
                     
                     if est1RM > 0 {
                         Spacer()
@@ -1305,6 +1330,7 @@ struct ContentView: View {
         @Binding var timerRegularSec: Int
         @Binding var timerBBBsec: Int
         @Binding var tmProgStyleRaw: String
+        @Binding var autoAdvanceWeek: Bool
         
         @State private var tmpSquat = ""
         @State private var tmpBench = ""
@@ -1378,6 +1404,10 @@ struct ContentView: View {
                         Text("Classic = steady +5 upper / +10 lower per cycle.\nAuto = set TM to 90% of latest AMRAP est. 1RM (capped at +10 upper / +20 lower).")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+                    
+                    Section("Behavior") {
+                        Toggle("Auto-advance week after finishing workout", isOn: $autoAdvanceWeek)
                     }
                     
                     Section {
