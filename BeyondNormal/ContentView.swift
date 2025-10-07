@@ -82,56 +82,11 @@ struct ContentView: View {
     @AppStorage("bar_weight")  private var barWeight: Double  = 45
     @AppStorage("round_to")    private var roundTo: Double    = 5
     
-    // Persisted AMRAP reps per lift
-    @AppStorage("amrap_reps_squat")    private var amrapRepsSquat: Int = 0
-    @AppStorage("amrap_reps_bench")    private var amrapRepsBench: Int = 0
-    @AppStorage("amrap_reps_deadlift") private var amrapRepsDeadlift: Int = 0
-    @AppStorage("amrap_reps_row") private var amrapRepsRow: Int = 0
-    
     // BBB percent (50–70% of TM)
     @AppStorage("bbb_pct") private var bbbPct: Double = 0.50
     
-    // Persisted per-lift set completion - Squat
-    @AppStorage("set1_done_squat") private var set1DoneSquat = false
-    @AppStorage("set2_done_squat") private var set2DoneSquat = false
-    @AppStorage("set3_done_squat") private var set3DoneSquat = false
-    @AppStorage("bbb1_done_squat") private var bbb1DoneSquat = false
-    @AppStorage("bbb2_done_squat") private var bbb2DoneSquat = false
-    @AppStorage("bbb3_done_squat") private var bbb3DoneSquat = false
-    @AppStorage("bbb4_done_squat") private var bbb4DoneSquat = false
-    @AppStorage("bbb5_done_squat") private var bbb5DoneSquat = false
-    
-    // Persisted per-lift set completion – Bench
-    @AppStorage("set1_done_bench") private var set1DoneBench = false
-    @AppStorage("set2_done_bench") private var set2DoneBench = false
-    @AppStorage("set3_done_bench") private var set3DoneBench = false
-    @AppStorage("bbb1_done_bench") private var bbb1DoneBench = false
-    @AppStorage("bbb2_done_bench") private var bbb2DoneBench = false
-    @AppStorage("bbb3_done_bench") private var bbb3DoneBench = false
-    @AppStorage("bbb4_done_bench") private var bbb4DoneBench = false
-    @AppStorage("bbb5_done_bench") private var bbb5DoneBench = false
-    
-    // Persisted per-lift set completion – Deadlift
-    @AppStorage("set1_done_deadlift") private var set1DoneDeadlift = false
-    @AppStorage("set2_done_deadlift") private var set2DoneDeadlift = false
-    @AppStorage("set3_done_deadlift") private var set3DoneDeadlift = false
-    @AppStorage("bbb1_done_deadlift") private var bbb1DoneDeadlift = false
-    @AppStorage("bbb2_done_deadlift") private var bbb2DoneDeadlift = false
-    @AppStorage("bbb3_done_deadlift") private var bbb3DoneDeadlift = false
-    @AppStorage("bbb4_done_deadlift") private var bbb4DoneDeadlift = false
-    @AppStorage("bbb5_done_deadlift") private var bbb5DoneDeadlift = false
-    
-    
-    // Persisted per-lift set completion – Row
-    @AppStorage("set1_done_row") private var set1DoneRow = false
-    @AppStorage("set2_done_row") private var set2DoneRow = false
-    @AppStorage("set3_done_row") private var set3DoneRow = false
-    @AppStorage("bbb1_done_row") private var bbb1DoneRow = false
-    @AppStorage("bbb2_done_row") private var bbb2DoneRow = false
-    @AppStorage("bbb3_done_row") private var bbb3DoneRow = false
-    @AppStorage("bbb4_done_row") private var bbb4DoneRow = false
-    @AppStorage("bbb5_done_row") private var bbb5DoneRow = false
-    
+    // JSON storage for all workout state
+    @AppStorage("workout_state_v2") private var workoutStateJSON: String = "{}"
     
     // Assistance weights (use total or 0 if bodyweight/DB)
     @AppStorage("assist_weight_squat")    private var assistWeightSquat: Double = 0
@@ -139,32 +94,20 @@ struct ContentView: View {
     @AppStorage("assist_weight_deadlift") private var assistWeightDeadlift: Double = 0
     @AppStorage("assist_weight_row") private var assistWeightRow: Double = 0
     
-    // Three set checkboxes per lift (expand to 4–5 later if needed)
-    @AppStorage("assist1_done_squat") private var assist1DoneSquat = false
-    @AppStorage("assist2_done_squat") private var assist2DoneSquat = false
-    @AppStorage("assist3_done_squat") private var assist3DoneSquat = false
-    @AppStorage("assist1_done_bench") private var assist1DoneBench = false
-    @AppStorage("assist2_done_bench") private var assist2DoneBench = false
-    @AppStorage("assist3_done_bench") private var assist3DoneBench = false
-    @AppStorage("assist1_done_deadlift") private var assist1DoneDeadlift = false
-    @AppStorage("assist2_done_deadlift") private var assist2DoneDeadlift = false
-    @AppStorage("assist3_done_deadlift") private var assist3DoneDeadlift = false
-    @AppStorage("assist1_done_row") private var assist1DoneRow = false
-    @AppStorage("assist2_done_row") private var assist2DoneRow = false
-    @AppStorage("assist3_done_row") private var assist3DoneRow = false
-    
     // Timer related settings
     @AppStorage("timer_regular_sec") private var timerRegularSec: Int = 240   // 4:00
     @AppStorage("timer_bbb_sec")     private var timerBBBsec: Int = 180       // 3:00
     
     @AppStorage("current_week") private var currentWeek: Int = 1 // 1..4
     
+    // Behavior
     @AppStorage("tm_progression_style") private var tmProgStyleRaw: String = "classic" // "classic" or "auto"
+    @AppStorage("auto_advance_week") private var autoAdvanceWeek: Bool = false
     
     // Notes related
     @State private var workoutNotes: String = ""
     
-    // Plate set for tonight (we’ll make this editable later)
+    // Plate set for tonight (we'll make this editable later)
     private let plateInventory: [Double] = [45, 35, 25, 10, 5, 2.5]
     
     // UI state
@@ -521,6 +464,15 @@ struct ContentView: View {
                             notes: workoutNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : workoutNotes
                         )
                         WorkoutStore.shared.append(entry)
+                        
+                        // 🔹 Clear only the notes field - checkmarks remain
+                        workoutNotes = ""
+                        
+                        // 👇 Auto-advance week if enabled
+                        if autoAdvanceWeek {
+                            currentWeek = currentWeek % 4 + 1
+                        }
+                        
                         showSavedAlert = true
                     } label: {
                         Label("Finish Workout", systemImage: "checkmark.seal.fill")
@@ -538,7 +490,7 @@ struct ContentView: View {
                         Label("Reset Workout (Current Lift)", systemImage: "arrow.uturn.backward")
                     }
                     
-                    Text("v0.0.4 • Dev Build")
+                    Text("v0.0.5 • Dev Build")
                         .font(.footnote)
                         .foregroundStyle(.tertiary)
                 }
@@ -571,7 +523,8 @@ struct ContentView: View {
                 bbbPct: $bbbPct,
                 timerRegularSec: $timerRegularSec,
                 timerBBBsec: $timerBBBsec,
-                tmProgStyleRaw: $tmProgStyleRaw
+                tmProgStyleRaw: $tmProgStyleRaw,
+                autoAdvanceWeek: $autoAdvanceWeek
             )
             .presentationDetents([.medium, .large])
         }
@@ -580,10 +533,14 @@ struct ContentView: View {
                 .presentationDetents([.medium, .large])
         }
         .alert("Reset current lift?", isPresented: $showResetConfirm) {
-            Button("Reset", role: .destructive) { resetCurrentLift() }
+            Button("Reset", role: .destructive) {
+                resetCurrentLift()
+                workoutNotes = ""
+                liveRepsText = ""
+            }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("This will clear 65/75/85 sets, BBB sets, assistance sets, AMRAP reps, and workout notes.")
+            Text("This will clear all sets (main, BBB, assistance), AMRAP reps, and workout notes for \(selectedLift.label).")
         }
         .alert("Saved!", isPresented: $showSavedAlert) {
             Button("OK", role: .cancel) { }
@@ -603,7 +560,7 @@ struct ContentView: View {
         .onAppear {
             let center = UNUserNotificationCenter.current()
             center.delegate = LocalNotifDelegate.shared
-            requestNotifsIfNeeded() // you already have this helper
+            requestNotifsIfNeeded()
         }
     }
     
@@ -635,7 +592,7 @@ struct ContentView: View {
         case .squat:    return .init(title: "Hanging Leg Raise", defaultBarWeight: 0,  defaultSets: 3, defaultReps: 12, useEZBar: false)
         case .bench:    return .init(title: "Lying Triceps Extension (EZ bar 25 lb)", defaultBarWeight: 25, defaultSets: 3, defaultReps: 12, useEZBar: true)
         case .deadlift: return .init(title: "Back Extension", defaultBarWeight: 0,  defaultSets: 3, defaultReps: 12, useEZBar: false)
-        case .row:    return .init(title: "Spider Curls (DBs)", defaultBarWeight: 0,  defaultSets: 3, defaultReps: 12, useEZBar: false)
+        case .row:      return .init(title: "Spider Curls (DBs)", defaultBarWeight: 0,  defaultSets: 3, defaultReps: 12, useEZBar: false)
         }
     }
     
@@ -696,22 +653,64 @@ struct ContentView: View {
         }
     }
     
-    private func isAssistCompleted(_ n: Int) -> Bool {
-        switch (selectedLift, n) {
-        case (.squat, 1): return assist1DoneSquat
-        case (.squat, 2): return assist2DoneSquat
-        case (.squat, 3): return assist3DoneSquat
-        case (.bench, 1): return assist1DoneBench
-        case (.bench, 2): return assist2DoneBench
-        case (.bench, 3): return assist3DoneBench
-        case (.deadlift, 1): return assist1DoneDeadlift
-        case (.deadlift, 2): return assist2DoneDeadlift
-        case (.deadlift, 3): return assist3DoneDeadlift
-        case (.row, 1): return assist1DoneRow
-        case (.row, 2): return assist2DoneRow
-        case (.row, 3): return assist3DoneRow
-        default: return false
+    // MARK: - Workout State Helpers (NEW)
+    private func readWorkoutState() -> [String: String] {
+        guard let data = workoutStateJSON.data(using: .utf8),
+              let dict = try? JSONDecoder().decode([String: String].self, from: data) else {
+            return [:]
         }
+        return dict
+    }
+    
+    private func writeWorkoutState(_ dict: [String: String]) {
+        if let data = try? JSONEncoder().encode(dict),
+           let json = String(data: data, encoding: .utf8) {
+            workoutStateJSON = json
+        }
+    }
+    
+    private func stateKey(lift: Lift, week: Int, type: String, num: Int) -> String {
+        "\(lift.rawValue)_w\(week)_\(type)\(num)"
+    }
+    
+    private func getSetComplete(lift: Lift, week: Int, set: Int) -> Bool {
+        let key = stateKey(lift: lift, week: week, type: "set", num: set)
+        return readWorkoutState()[key] == "true"
+    }
+    
+    private func setSetComplete(lift: Lift, week: Int, set: Int, value: Bool) {
+        var state = readWorkoutState()
+        let key = stateKey(lift: lift, week: week, type: "set", num: set)
+        state[key] = value ? "true" : "false"
+        writeWorkoutState(state)
+    }
+    
+    private func getAssistComplete(lift: Lift, week: Int, set: Int) -> Bool {
+        let key = stateKey(lift: lift, week: week, type: "assist", num: set)
+        return readWorkoutState()[key] == "true"
+    }
+    
+    private func setAssistComplete(lift: Lift, week: Int, set: Int, value: Bool) {
+        var state = readWorkoutState()
+        let key = stateKey(lift: lift, week: week, type: "assist", num: set)
+        state[key] = value ? "true" : "false"
+        writeWorkoutState(state)
+    }
+    
+    private func getAMRAP(lift: Lift, week: Int) -> Int {
+        let key = "\(lift.rawValue)_w\(week)_amrap"
+        return Int(readWorkoutState()[key] ?? "0") ?? 0
+    }
+    
+    private func setAMRAP(lift: Lift, week: Int, reps: Int) {
+        var state = readWorkoutState()
+        let key = "\(lift.rawValue)_w\(week)_amrap"
+        state[key] = String(reps)
+        writeWorkoutState(state)
+    }
+    
+    private func isAssistCompleted(_ n: Int) -> Bool {
+        return getAssistComplete(lift: selectedLift, week: currentWeek, set: n)
     }
     
     private func assistWeightBinding(for lift: Lift) -> Binding<Double> {
@@ -719,79 +718,26 @@ struct ContentView: View {
         case .squat:    return $assistWeightSquat
         case .bench:    return $assistWeightBench
         case .deadlift: return $assistWeightDeadlift
-        case .row:    return $assistWeightRow
+        case .row:      return $assistWeightRow
         }
     }
     
     private func assistSetBinding(_ n: Int) -> Binding<Bool> {
-        switch (selectedLift, n) {
-        case (.squat, 1): return $assist1DoneSquat
-        case (.squat, 2): return $assist2DoneSquat
-        case (.squat, 3): return $assist3DoneSquat
-        case (.bench, 1): return $assist1DoneBench
-        case (.bench, 2): return $assist2DoneBench
-        case (.bench, 3): return $assist3DoneBench
-        case (.deadlift, 1): return $assist1DoneDeadlift
-        case (.deadlift, 2): return $assist2DoneDeadlift
-        case (.deadlift, 3): return $assist3DoneDeadlift
-        case (.row, 1): return $assist1DoneRow
-        case (.row, 2): return $assist2DoneRow
-        case (.row, 3): return $assist3DoneRow
-        default: return .constant(false)
-        }
+        return Binding(
+            get: { self.getAssistComplete(lift: self.selectedLift, week: self.currentWeek, set: n) },
+            set: { newValue in
+                self.setAssistComplete(lift: self.selectedLift, week: self.currentWeek, set: n, value: newValue)
+            }
+        )
     }
     
     private func setBinding(_ num: Int) -> Binding<Bool> {
-        switch selectedLift {
-        case .squat:
-            switch num {
-            case 1: return $set1DoneSquat
-            case 2: return $set2DoneSquat
-            case 3: return $set3DoneSquat
-            case 4: return $bbb1DoneSquat
-            case 5: return $bbb2DoneSquat
-            case 6: return $bbb3DoneSquat
-            case 7: return $bbb4DoneSquat
-            case 8: return $bbb5DoneSquat
-            default: return .constant(false)
+        return Binding(
+            get: { self.getSetComplete(lift: self.selectedLift, week: self.currentWeek, set: num) },
+            set: { newValue in
+                self.setSetComplete(lift: self.selectedLift, week: self.currentWeek, set: num, value: newValue)
             }
-        case .bench:
-            switch num {
-            case 1: return $set1DoneBench
-            case 2: return $set2DoneBench
-            case 3: return $set3DoneBench
-            case 4: return $bbb1DoneBench
-            case 5: return $bbb2DoneBench
-            case 6: return $bbb3DoneBench
-            case 7: return $bbb4DoneBench
-            case 8: return $bbb5DoneBench
-            default: return .constant(false)
-            }
-        case .deadlift:
-            switch num {
-            case 1: return $set1DoneDeadlift
-            case 2: return $set2DoneDeadlift
-            case 3: return $set3DoneDeadlift
-            case 4: return $bbb1DoneDeadlift
-            case 5: return $bbb2DoneDeadlift
-            case 6: return $bbb3DoneDeadlift
-            case 7: return $bbb4DoneDeadlift
-            case 8: return $bbb5DoneDeadlift
-            default: return .constant(false)
-            }
-        case .row:
-            switch num {
-            case 1: return $set1DoneRow
-            case 2: return $set2DoneRow
-            case 3: return $set3DoneRow
-            case 4: return $bbb1DoneRow
-            case 5: return $bbb2DoneRow
-            case 6: return $bbb3DoneRow
-            case 7: return $bbb4DoneRow
-            case 8: return $bbb5DoneRow
-            default: return .constant(false)
-            }
-        }
+        )
     }
     
     private func platesForEZ(target: Double) -> [Double] {
@@ -830,141 +776,40 @@ struct ContentView: View {
     }
     
     private func resetCurrentLift() {
-        switch selectedLift {
-        case .squat:
-            set1DoneSquat = false
-            set2DoneSquat = false
-            set3DoneSquat = false
-            bbb1DoneSquat = false
-            bbb2DoneSquat = false
-            bbb3DoneSquat = false
-            bbb4DoneSquat = false
-            bbb5DoneSquat = false
-            amrapRepsSquat = 0
-            // assistance
-            assist1DoneSquat = false
-            assist2DoneSquat = false
-            assist3DoneSquat = false
-            // optional: reset weight to default for this lift
-            assistWeightSquat = 0
-            
-        case .bench:
-            set1DoneBench = false
-            set2DoneBench = false
-            set3DoneBench = false
-            bbb1DoneBench = false
-            bbb2DoneBench = false
-            bbb3DoneBench = false
-            bbb4DoneBench = false
-            bbb5DoneBench = false
-            amrapRepsBench = 0
-            // assistance
-            assist1DoneBench = false
-            assist2DoneBench = false
-            assist3DoneBench = false
-            // optional: reset weight; LTE defaults to EZ bar 25 + suggest 40 total? keep your 65 default if you prefer
-            assistWeightBench = 65
-            
-        case .deadlift:
-            set1DoneDeadlift = false
-            set2DoneDeadlift = false
-            set3DoneDeadlift = false
-            bbb1DoneDeadlift = false
-            bbb2DoneDeadlift = false
-            bbb3DoneDeadlift = false
-            bbb4DoneDeadlift = false
-            bbb5DoneDeadlift = false
-            amrapRepsDeadlift = 0
-            // assistance
-            assist1DoneDeadlift = false
-            assist2DoneDeadlift = false
-            assist3DoneDeadlift = false
-            // optional
-            assistWeightDeadlift = 0
-            
-        case .row:
-            set1DoneRow = false
-            set2DoneRow = false
-            set3DoneRow = false
-            bbb1DoneRow = false
-            bbb2DoneRow = false
-            bbb3DoneRow = false
-            bbb4DoneRow = false
-            bbb5DoneRow = false
-            amrapRepsRow = 0
-            // assistance
-            assist1DoneRow = false
-            assist2DoneRow = false
-            assist3DoneRow = false
-            // optional
-            assistWeightRow = 0
+        // Clear all sets for current lift and week
+        for setNum in 1...8 {
+            setSetComplete(lift: selectedLift, week: currentWeek, set: setNum, value: false)
         }
         
-        workoutNotes = ""
-    }
-    
-    // Returns whether a given row is completed for the currently selected lift
-    private func isCompleted(_ num: Int) -> Bool {
+        // Clear assistance sets
+        for setNum in 1...3 {
+            setAssistComplete(lift: selectedLift, week: currentWeek, set: setNum, value: false)
+        }
+        
+        // Clear AMRAP
+        setAMRAP(lift: selectedLift, week: currentWeek, reps: 0)
+        
+        // Reset assistance weight to defaults
         switch selectedLift {
         case .squat:
-            switch num {
-            case 1: return set1DoneSquat
-            case 2: return set2DoneSquat
-            case 3: return set3DoneSquat
-            case 4: return bbb1DoneSquat
-            case 5: return bbb2DoneSquat
-            case 6: return bbb3DoneSquat
-            case 7: return bbb4DoneSquat
-            case 8: return bbb5DoneSquat
-            default: return false
-            }
+            assistWeightSquat = 0
         case .bench:
-            switch num {
-            case 1: return set1DoneBench
-            case 2: return set2DoneBench
-            case 3: return set3DoneBench
-            case 4: return bbb1DoneBench
-            case 5: return bbb2DoneBench
-            case 6: return bbb3DoneBench
-            case 7: return bbb4DoneBench
-            case 8: return bbb5DoneBench
-            default: return false
-            }
+            assistWeightBench = 65
         case .deadlift:
-            switch num {
-            case 1: return set1DoneDeadlift
-            case 2: return set2DoneDeadlift
-            case 3: return set3DoneDeadlift
-            case 4: return bbb1DoneDeadlift
-            case 5: return bbb2DoneDeadlift
-            case 6: return bbb3DoneDeadlift
-            case 7: return bbb4DoneDeadlift
-            case 8: return bbb5DoneDeadlift
-            default: return false
-            }
+            assistWeightDeadlift = 0
         case .row:
-            switch num {
-            case 1: return set1DoneRow
-            case 2: return set2DoneRow
-            case 3: return set3DoneRow
-            case 4: return bbb1DoneRow
-            case 5: return bbb2DoneRow
-            case 6: return bbb3DoneRow
-            case 7: return bbb4DoneRow
-            case 8: return bbb5DoneRow
-            default: return false
-            }
+            assistWeightRow = 0
         }
     }
     
-    // Numeric AMRAP reps for the current lift
+    // Returns whether a given row is completed for the currently selected lift and week
+    private func isCompleted(_ num: Int) -> Bool {
+        return getSetComplete(lift: selectedLift, week: currentWeek, set: num)
+    }
+    
+    // Numeric AMRAP reps for the current lift and week
     private var currentAMRAP: Int {
-        switch selectedLift {
-        case .squat: return amrapRepsSquat
-        case .bench: return amrapRepsBench
-        case .deadlift: return amrapRepsDeadlift
-        case .row: return amrapRepsRow
-        }
+        return getAMRAP(lift: selectedLift, week: currentWeek)
     }
     
     private func currentWorkoutMetrics() -> (est: Double, totalVol: Int, mainVol: Int, bbbVol: Int, assistVol: Int) {
@@ -1025,7 +870,6 @@ struct ContentView: View {
     
     private func pauseTimer() {
         timerRunning = false
-        // keep remaining; don't clear end so we can resume if you want to extend later
         timerEnd = nil
         cancelDoneNotification()
     }
@@ -1037,7 +881,6 @@ struct ContentView: View {
         cancelDoneNotification()
     }
     
-    // format mm:ss
     private func mmss(_ s: Int) -> String {
         let m = s / 60, r = s % 60
         return String(format: "%d:%02d", m, r)
@@ -1069,36 +912,19 @@ struct ContentView: View {
     
     // AMRAP helpers
     private func repsText(for lift: Lift) -> String {
-        let r: Int
-        switch lift {
-        case .squat: r = amrapRepsSquat
-        case .bench: r = amrapRepsBench
-        case .deadlift: r = amrapRepsDeadlift
-        case .row: r = amrapRepsRow
-        }
+        let r = getAMRAP(lift: lift, week: currentWeek)
         return r == 0 ? "" : String(r)
     }
     
     private func saveReps(_ text: String, for lift: Lift) {
         let r = Int(text) ?? 0
-        switch lift {
-        case .squat: amrapRepsSquat = r
-        case .bench: amrapRepsBench = r
-        case .deadlift: amrapRepsDeadlift = r
-        case .row: amrapRepsRow = r
-        }
+        setAMRAP(lift: lift, week: currentWeek, reps: r)
     }
     
     private func est1RM(for lift: Lift, weight: Double) -> Double {
-        let reps: Int
-        switch lift {
-        case .squat: reps = amrapRepsSquat
-        case .bench: reps = amrapRepsBench
-        case .deadlift: reps = amrapRepsDeadlift
-        case .row: reps = amrapRepsRow
-        }
+        let reps = getAMRAP(lift: lift, week: currentWeek)
         guard reps > 0 else { return 0 }
-        let est = weight * (1 + Double(reps) / 30.0) // Epley
+        let est = weight * (1 + Double(reps) / 30.0)
         return roundToInc(est)
     }
     
@@ -1112,7 +938,7 @@ struct ContentView: View {
                     if entries.isEmpty {
                         ContentUnavailableView("No saved workouts yet",
                                                systemImage: "tray",
-                                               description: Text("Tap “Finish Workout” after a session to log it here."))
+                                               description: Text("Tap \"Finish Workout\" after a session to log it here."))
                     } else {
                         ForEach(entries.sorted(by: { $0.date > $1.date })) { e in
                             VStack(alignment: .leading, spacing: 4) {
@@ -1137,7 +963,6 @@ struct ContentView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 
-                                // 👇 Notes preview (now 'e' is in scope)
                                 if let n = e.notes, !n.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                     Text(n)
                                         .font(.caption)
@@ -1156,10 +981,8 @@ struct ContentView: View {
                             .padding(.vertical, 4)
                             .contentShape(Rectangle())
                             .onTapGesture {
-                                // Tapping the row toggles too
                                 if expanded.contains(e.id) { expanded.remove(e.id) } else { expanded.insert(e.id) }
                             }
-                            // 👇 Swipe left to delete
                             .swipeActions {
                                 Button(role: .destructive) {
                                     delete(e)
@@ -1211,7 +1034,7 @@ struct ContentView: View {
         
         var body: some View {
             HStack(alignment: .firstTextBaseline) {
-                Toggle(isOn: $done) { Text(label) } // default iOS toggle style
+                Toggle(isOn: $done) { Text(label) }
                 Spacer(minLength: 12)
                 VStack(alignment: .trailing, spacing: 2) {
                     Text("\(Int(weight)) lb").font(.headline)
@@ -1222,7 +1045,6 @@ struct ContentView: View {
                     }
                 }
             }
-            // fire when the toggle changes
             .onChange(of: done) { _, new in
                 onCheck?(new)
             }
@@ -1234,7 +1056,6 @@ struct ContentView: View {
         }
     }
     
-    // 1. Fix AMRAPRow - Remove nested toolbar
     private struct AMRAPRow: View {
         let label: String
         let weight: Double
@@ -1243,7 +1064,7 @@ struct ContentView: View {
         @Binding var reps: String
         let est1RM: Double
         var onCheck: ((Bool) -> Void)? = nil
-        @FocusState private var isFocused: Bool  // Add this
+        @FocusState private var isFocused: Bool
         
         var body: some View {
             VStack(alignment: .leading, spacing: 8) {
@@ -1269,9 +1090,17 @@ struct ContentView: View {
                         .keyboardType(.numberPad)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 80)
-                        .focused($isFocused)  // Use FocusState instead
+                        .focused($isFocused)
                         .onSubmit {
                             isFocused = false
+                        }
+                        .toolbar {
+                            ToolbarItemGroup(placement: .keyboard) {
+                                Spacer()
+                                Button("Done") {
+                                    isFocused = false
+                                }
+                            }
                         }
                     
                     if est1RM > 0 {
@@ -1305,6 +1134,7 @@ struct ContentView: View {
         @Binding var timerRegularSec: Int
         @Binding var timerBBBsec: Int
         @Binding var tmProgStyleRaw: String
+        @Binding var autoAdvanceWeek: Bool
         
         @State private var tmpSquat = ""
         @State private var tmpBench = ""
@@ -1355,6 +1185,7 @@ struct ContentView: View {
                                 .keyboardType(.numberPad)
                                 .multilineTextAlignment(.trailing)
                                 .frame(width: 80)
+                                .focused($focusedField, equals: .timerRegular)
                         }
                         HStack {
                             Text("BBB / accessory")
@@ -1363,6 +1194,7 @@ struct ContentView: View {
                                 .keyboardType(.numberPad)
                                 .multilineTextAlignment(.trailing)
                                 .frame(width: 80)
+                                .focused($focusedField, equals: .timerBBB)
                         }
                         Text("Tip: 240s = 4:00, 180s = 3:00")
                             .font(.caption)
@@ -1378,6 +1210,10 @@ struct ContentView: View {
                         Text("Classic = steady +5 upper / +10 lower per cycle.\nAuto = set TM to 90% of latest AMRAP est. 1RM (capped at +10 upper / +20 lower).")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+                    
+                    Section("Behavior") {
+                        Toggle("Auto-advance week after finishing workout", isOn: $autoAdvanceWeek)
                     }
                     
                     Section {
@@ -1408,7 +1244,7 @@ struct ContentView: View {
                             if let v = Double(tmpSquat)    { tmSquat = v }
                             if let v = Double(tmpBench)    { tmBench = v }
                             if let v = Double(tmpDeadlift) { tmDeadlift = v }
-                            if let v = Double(tmpRow)    { tmRow = v }
+                            if let v = Double(tmpRow)      { tmRow = v }
                             if let v = Double(tmpBarWeight){ barWeight = v }
                             if let v = Double(tmpRoundTo)  { roundTo = v }
                             if let v = Int(tmpTimerRegular) { timerRegularSec = max(1, v) }
