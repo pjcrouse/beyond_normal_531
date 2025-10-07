@@ -1,0 +1,32 @@
+# Xcode / macOS
+.DS_Store
+build/
+DerivedData/
+*.xcuserstate
+
+# Xcode user data (don’t commit per-user settings)
+**/*.xcscmblueprint
+**/*.xccheckout
+**/*.xcuserdatad/
+**/*_CodeCoverage.profdata
+
+# Schemes: commit shared only
+**/xcuserdata/
+!**/xcshareddata/
+
+# SwiftPM
+.swiftpm/
+.build/
+Package.pins
+# Keep the resolved file pinned for reproducible builds:
+Package.resolved
+
+# Cocoapods (if you use it)
+Pods/
+Podfile.lock
+
+# Carthage (if you use it)
+Carthage/Build/
+
+# SwiftLint, etc.
+.swiftlint.yml
