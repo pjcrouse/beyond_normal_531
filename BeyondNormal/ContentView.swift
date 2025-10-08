@@ -6,7 +6,6 @@ import UserNotifications
 final class LocalNotifDelegate: NSObject, UNUserNotificationCenterDelegate {
     static let shared = LocalNotifDelegate()
     
-    // Show banner + play sound while app is in foreground
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
@@ -58,69 +57,306 @@ final class WorkoutStore {
         }
     }
     
-    private func save(_ all: [WorkoutEntry]) {
+    func delete(id: UUID) {
+        var all = load()
+        all.removeAll { $0.id == id }
         if let data = try? JSONEncoder().encode(all) {
             try? data.write(to: url, options: .atomic)
         }
     }
+}
+
+// MARK: - Workout State Manager
+final class WorkoutStateManager: ObservableObject {
+    @Published private(set) var state: [String: String] = [:]
+    @Published private(set) var completedLifts: [String: [String]] = [:]
     
-    func delete(id: UUID) {
-        var all = load()
-        all.removeAll { $0.id == id }
-        save(all)
+    private let stateKey = "workout_state_v2"
+    private let liftsKey = "completed_lifts_by_week"
+    private var saveWorkItem: DispatchWorkItem?
+    private let queue = DispatchQueue(label: "com.beyondnormal.workout.state", qos: .userInitiated)
+    
+    init() {
+        // Load state asynchronously to avoid blocking app launch
+        queue.async { [weak self] in
+            self?.loadState()
+            self?.loadCompletedLifts()
+        }
+    }
+    
+    private func loadState() {
+        guard let json = UserDefaults.standard.string(forKey: stateKey),
+              let data = json.data(using: .utf8),
+              let dict = try? JSONDecoder().decode([String: String].self, from: data) else {
+            DispatchQueue.main.async { [weak self] in
+                self?.state = [:]
+            }
+            return
+        }
+        DispatchQueue.main.async { [weak self] in
+            self?.state = dict
+        }
+    }
+    
+    private func saveState() {
+        // Debounce saves to avoid excessive writes
+        saveWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            self.queue.async {
+                guard let data = try? JSONEncoder().encode(self.state),
+                      let json = String(data: data, encoding: .utf8) else { return }
+                UserDefaults.standard.set(json, forKey: self.stateKey)
+            }
+        }
+        saveWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
+    }
+    
+    private func loadCompletedLifts() {
+        guard let json = UserDefaults.standard.string(forKey: liftsKey),
+              let data = json.data(using: .utf8),
+              let dict = try? JSONDecoder().decode([String: [String]].self, from: data) else {
+            DispatchQueue.main.async { [weak self] in
+                self?.completedLifts = [:]
+            }
+            return
+        }
+        DispatchQueue.main.async { [weak self] in
+            self?.completedLifts = dict
+        }
+    }
+    
+    private func saveCompletedLifts() {
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            guard let data = try? JSONEncoder().encode(self.completedLifts),
+                  let json = String(data: data, encoding: .utf8) else { return }
+            UserDefaults.standard.set(json, forKey: self.liftsKey)
+        }
+    }
+    
+    func getSetComplete(lift: String, week: Int, set: Int) -> Bool {
+        let key = "\(lift)_w\(week)_set\(set)"
+        return state[key] == "true"
+    }
+    
+    func setSetComplete(lift: String, week: Int, set: Int, value: Bool) {
+        let key = "\(lift)_w\(week)_set\(set)"
+        state[key] = value ? "true" : "false"
+        saveState()
+    }
+    
+    func getAssistComplete(lift: String, week: Int, set: Int) -> Bool {
+        let key = "\(lift)_w\(week)_assist\(set)"
+        return state[key] == "true"
+    }
+    
+    func setAssistComplete(lift: String, week: Int, set: Int, value: Bool) {
+        let key = "\(lift)_w\(week)_assist\(set)"
+        state[key] = value ? "true" : "false"
+        saveState()
+    }
+    
+    func getAMRAP(lift: String, week: Int) -> Int {
+        let key = "\(lift)_w\(week)_amrap"
+        return Int(state[key] ?? "0") ?? 0
+    }
+    
+    func setAMRAP(lift: String, week: Int, reps: Int) {
+        let key = "\(lift)_w\(week)_amrap"
+        state[key] = String(reps)
+        saveState()
+    }
+    
+    func markLiftComplete(_ lift: String, week: Int) {
+        var lifts = completedLifts["w\(week)"] ?? []
+        if !lifts.contains(lift) {
+            lifts.append(lift)
+            completedLifts["w\(week)"] = lifts
+            saveCompletedLifts()
+        }
+    }
+    
+    func allLiftsComplete(for week: Int, totalLifts: Int) -> Bool {
+        let lifts = completedLifts["w\(week)"] ?? []
+        return lifts.count >= totalLifts
+    }
+    
+    func resetCompletedLifts(for week: Int) {
+        completedLifts["w\(week)"] = []
+        saveCompletedLifts()
+    }
+    
+    func resetLift(lift: String, week: Int) {
+        for setNum in 1...8 {
+            let key = "\(lift)_w\(week)_set\(setNum)"
+            state.removeValue(forKey: key)
+        }
+        for setNum in 1...3 {
+            let key = "\(lift)_w\(week)_assist\(setNum)"
+            state.removeValue(forKey: key)
+        }
+        let amrapKey = "\(lift)_w\(week)_amrap"
+        state.removeValue(forKey: amrapKey)
+        saveState()
+    }
+}
+
+// MARK: - Timer Manager (Isolated from view)
+final class TimerManager: ObservableObject {
+    @Published var remaining: Int = 0
+    @Published var isRunning: Bool = false
+    
+    private var endTime: Date?
+    private var cancellable: AnyCancellable?
+    
+    func start(seconds: Int) {
+        endTime = Date().addingTimeInterval(TimeInterval(seconds))
+        remaining = seconds
+        isRunning = true
+        scheduleNotification(in: seconds)
+        startTicking()
+    }
+    
+    func pause() {
+        isRunning = false
+        endTime = nil
+        cancellable?.cancel()
+        cancelNotification()
+    }
+    
+    func reset() {
+        isRunning = false
+        endTime = nil
+        remaining = 0
+        cancellable?.cancel()
+        cancelNotification()
+    }
+    
+    private func startTicking() {
+        cancellable?.cancel()
+        cancellable = Timer.publish(every: 1, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                self?.tick()
+            }
+    }
+    
+    private func tick() {
+        guard isRunning, let end = endTime else { return }
+        let left = max(0, Int(end.timeIntervalSinceNow.rounded()))
+        remaining = left
+        if left == 0 {
+            isRunning = false
+            endTime = nil
+            cancellable?.cancel()
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        }
+    }
+    
+    private func scheduleNotification(in seconds: Int) {
+        let content = UNMutableNotificationContent()
+        content.title = "Rest finished"
+        content.body = "Time to lift!"
+        content.sound = UNNotificationSound.default
+        
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(seconds), repeats: false)
+        let req = UNNotificationRequest(identifier: "rest-timer", content: content, trigger: trigger)
+        UNUserNotificationCenter.current().add(req)
+    }
+    
+    private func cancelNotification() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["rest-timer"])
+    }
+}
+
+// MARK: - Plate Calculator (Cached)
+final class PlateCalculator {
+    private let barWeight: Double
+    private let roundTo: Double
+    private let inventory: [Double]
+    private var cache: [String: [Double]] = [:]
+    
+    init(barWeight: Double, roundTo: Double, inventory: [Double]) {
+        self.barWeight = barWeight
+        self.roundTo = roundTo
+        self.inventory = inventory.filter { $0.isFinite && $0 > 0 }.sorted(by: >)
+    }
+    
+    func round(_ x: Double) -> Double {
+        let inc = (roundTo.isFinite && roundTo > 0) ? roundTo : 0.5
+        return (x / inc).rounded() * inc
+    }
+    
+    func plates(target: Double, barWeight: Double? = nil) -> [Double] {
+        let bar = barWeight ?? self.barWeight
+        let key = "\(target)_\(bar)"
+        
+        if let cached = cache[key] {
+            return cached
+        }
+        
+        guard target.isFinite, bar.isFinite, bar > 0, target >= bar else { return [] }
+        var remainingPerSide = (target - bar) / 2.0
+        guard remainingPerSide.isFinite, remainingPerSide >= 0 else { return [] }
+        
+        var out: [Double] = []
+        for p in inventory {
+            var guardCounter = 0
+            while remainingPerSide + 1e-9 >= p && guardCounter < 200 {
+                out.append(p)
+                remainingPerSide -= p
+                guardCounter += 1
+            }
+        }
+        
+        cache[key] = out
+        return out
     }
 }
 
 struct ContentView: View {
-    // Persisted Training Maxes (lb)
-    @AppStorage("tm_squat")    private var tmSquat: Double    = 315
-    @AppStorage("tm_bench")    private var tmBench: Double    = 225
+    @AppStorage("tm_squat")    private var tmSquat: Double = 315
+    @AppStorage("tm_bench")    private var tmBench: Double = 225
     @AppStorage("tm_deadlift") private var tmDeadlift: Double = 405
-    @AppStorage("tm_row") private var tmRow: Double = 185
+    @AppStorage("tm_row")      private var tmRow: Double = 185
     
-    // Persisted loading prefs
-    @AppStorage("bar_weight")  private var barWeight: Double  = 45
-    @AppStorage("round_to")    private var roundTo: Double    = 5
+    @AppStorage("bar_weight")  private var barWeight: Double = 45
+    @AppStorage("round_to")    private var roundTo: Double = 5
+    @AppStorage("bbb_pct")     private var bbbPct: Double = 0.50
     
-    // BBB percent (50–70% of TM)
-    @AppStorage("bbb_pct") private var bbbPct: Double = 0.50
-    
-    // JSON storage for all workout state
-    @AppStorage("workout_state_v2") private var workoutStateJSON: String = "{}"
-    
-    // Assistance weights (use total or 0 if bodyweight/DB)
     @AppStorage("assist_weight_squat")    private var assistWeightSquat: Double = 0
     @AppStorage("assist_weight_bench")    private var assistWeightBench: Double = 65
     @AppStorage("assist_weight_deadlift") private var assistWeightDeadlift: Double = 0
-    @AppStorage("assist_weight_row") private var assistWeightRow: Double = 0
+    @AppStorage("assist_weight_row")      private var assistWeightRow: Double = 0
     
-    // Timer related settings
-    @AppStorage("timer_regular_sec") private var timerRegularSec: Int = 240   // 4:00
-    @AppStorage("timer_bbb_sec")     private var timerBBBsec: Int = 180       // 3:00
+    @AppStorage("timer_regular_sec") private var timerRegularSec: Int = 240
+    @AppStorage("timer_bbb_sec")     private var timerBBBsec: Int = 180
+    @AppStorage("current_week")      private var currentWeek: Int = 1
     
-    @AppStorage("current_week") private var currentWeek: Int = 1 // 1..4
+    @AppStorage("tm_progression_style") private var tmProgStyleRaw: String = "classic"
+    @AppStorage("auto_advance_week")    private var autoAdvanceWeek: Bool = false
     
-    // Behavior
-    @AppStorage("tm_progression_style") private var tmProgStyleRaw: String = "classic" // "classic" or "auto"
-    @AppStorage("auto_advance_week") private var autoAdvanceWeek: Bool = false
+    @StateObject private var workoutState = WorkoutStateManager()
+    @StateObject private var timer = TimerManager()
     
-    // Notes related
     @State private var workoutNotes: String = ""
-    
-    // Plate set for tonight (we'll make this editable later)
-    private let plateInventory: [Double] = [45, 35, 25, 10, 5, 2.5]
-    
-    // UI state
+    @State private var debouncedNotes: String = ""
+    @State private var savedAlertText = ""
     @State private var showSettings = false
     @State private var showPRs = false
     @State private var selectedLift: Lift = .bench
-    @State private var liveRepsText: String = ""   // text field binding for current lift
+    @State private var liveRepsText: String = ""
     @State private var showResetConfirm = false
     @State private var showSavedAlert = false
     @State private var showHistory = false
-    @State private var timerEnd: Date? = nil
-    @State private var timerRemaining: Int = 0
-    @State private var timerRunning: Bool = false
+    @State private var notesDebounceTask: Task<Void, Never>?
+    @FocusState private var amrapFocused: Bool
+    
+    private var calculator: PlateCalculator {
+        PlateCalculator(barWeight: barWeight, roundTo: roundTo, inventory: [45, 35, 25, 10, 5, 2.5])
+    }
     
     var body: some View {
         NavigationStack {
@@ -134,367 +370,25 @@ struct ContentView: View {
                 
                 ScrollView {
                     VStack(spacing: 16) {
-                        // Logo / Title
-                        if UIImage(named: "BeyondNormalLogo") != nil {
-                            Image("BeyondNormalLogo")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(maxWidth: 220)
-                                .accessibilityLabel("Beyond Normal")
-                        } else {
-                            Text("Beyond Normal")
-                                .font(.largeTitle.weight(.bold))
-                                .padding(.horizontal)
-                        }
+                        headerView
+                        trainingMaxesView
+                        quickTargetView
+                        prDisclosureView
+                        workoutBlockView
+                        assistanceView
+                        summaryView
+                        finishButton
                         
-                        // Saved TM readout
-                        VStack(spacing: 6) {
-                            Text("Training Maxes (lb)").font(.headline)
-                            Text("SQ \(int(tmSquat))  •  BP \(int(tmBench))  •  DL \(int(tmDeadlift))  •  ROW \(int(tmRow))")
-                                .foregroundStyle(.secondary)
-                        }
+                        Divider().padding(.vertical, 6)
                         
-                        // Dynamic quick target for the selected lift
-                        VStack(spacing: 4) {
-                            let tmSel = tmFor(selectedLift)
-                            let scheme = weekScheme(currentWeek)
-                            let topPct = scheme.main.last?.pct ?? 0.85
-                            let topW = roundToInc(tmSel * topPct)
-                            
-                            Text("Week \(currentWeek) • \(selectedLift.label)")
-                                .font(.headline)
-                            
-                            Text("\(scheme.topLine) → \(int(topW)) lb")
-                                .font(.title3.weight(.bold))
-                                .foregroundStyle(.blue)
-                        }
-                        .padding(.top, 6)
+                        resetButton
                         
-                        // Expandable PRs
-                        DisclosureGroup(isExpanded: $showPRs) {
-                            let tmSel = tmFor(selectedLift)
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("Week 1: 85% × 5+ → \(int(roundToInc(tmSel * 0.85))) lb")
-                                Text("Week 2: 90% × 3+ → \(int(roundToInc(tmSel * 0.90))) lb")
-                                Text("Week 3: 95% × 1+ → \(int(roundToInc(tmSel * 0.95))) lb")
-                            }
-                            .padding(.top, 4)
-                        } label: {
-                            Text("PR sets • \(selectedLift.label)")
-                                .font(.headline)
-                        }
-                        
-                        // ===== Week X workout block =====
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack {
-                                Text("Week \(currentWeek) Workout")
-                                    .font(.title3.weight(.bold))
-                                Spacer()
-                                // Week picker
-                                Picker("Week", selection: $currentWeek) {
-                                    Text("1").tag(1); Text("2").tag(2); Text("3").tag(3); Text("4").tag(4);
-                                }
-                                .pickerStyle(.segmented)
-                                .frame(maxWidth: 220)
-                            }
-                            // Lift picker
-                            Picker("Lift", selection: $selectedLift) {
-                                ForEach(Lift.allCases) { Text($0.label).tag($0) }
-                            }
-                            .pickerStyle(.segmented)
-                            .onChange(of: selectedLift) { _, new in
-                                liveRepsText = repsText(for: new)
-                            }
-                            
-                            let tm = tmFor(selectedLift)
-                            let scheme = weekScheme(currentWeek)
-                            let s0 = scheme.main[0], s1 = scheme.main[1], s2 = scheme.main[2]
-                            let w0 = roundToInc(tm * s0.pct)
-                            let w1 = roundToInc(tm * s1.pct)
-                            let w2 = roundToInc(tm * s2.pct)
-                            
-                            // --- MAIN SET 1 ---
-                            SetRow(
-                                label: "\(Int(s0.pct * 100))% × \(s0.reps)",
-                                weight: w0,
-                                perSide: platesFor(target: w0),
-                                done: setBinding(1),
-                                onCheck: { checked in if checked { startTimer(seconds: timerRegularSec) } }
-                            )
-                            
-                            // --- MAIN SET 2 ---
-                            SetRow(
-                                label: "\(Int(s1.pct * 100))% × \(s1.reps)",
-                                weight: w1,
-                                perSide: platesFor(target: w1),
-                                done: setBinding(2),
-                                onCheck: { checked in if checked { startTimer(seconds: timerRegularSec) } }
-                            )
-                            
-                            // --- MAIN SET 3 (AMRAP on W1–3, fixed on deload W4) ---
-                            if s2.amrap {
-                                AMRAPRow(
-                                    label: "\(Int(s2.pct * 100))% × \(s2.reps)+",
-                                    weight: w2,
-                                    perSide: platesFor(target: w2),
-                                    done: setBinding(3),
-                                    reps: $liveRepsText,
-                                    est1RM: est1RM(for: selectedLift, weight: roundToInc(tm * scheme.main[2].pct)),
-                                    onCheck: { checked in if checked { startTimer(seconds: timerRegularSec) } }
-                                )
-                            } else {
-                                SetRow(
-                                    label: "\(Int(s2.pct * 100))% × \(s2.reps)",
-                                    weight: w2,
-                                    perSide: platesFor(target: w2),
-                                    done: setBinding(3),
-                                    onCheck: { checked in if checked { startTimer(seconds: timerRegularSec) } }
-                                )
-                                // Nice nudge on deload
-                                Text("Deload week: skip BBB/assistance and add 10–20 min easy cardio.")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            
-                            // ===== Workout Notes (one per workout) =====
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Text("Workout Notes").font(.headline)
-                                    Spacer()
-                                    Text("saved with history").font(.caption).foregroundStyle(.secondary)
-                                }
-                                
-                                TextEditor(text: $workoutNotes)
-                                    .frame(minHeight: 80)
-                                    .scrollContentBackground(.hidden)
-                                    .padding(8)
-                                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
-                            }
-                            
-                            // ===== Rest Timer =====
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Text("Rest Timer").font(.headline)
-                                    Spacer()
-                                    Text(timerRunning ? "Running" : "Ready")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                }
-                                
-                                Text(timerRemaining > 0 ? mmss(timerRemaining) :
-                                        "Ready (\(mmss(timerRegularSec)) / \(mmss(timerBBBsec)))")
-                                .font(.system(size: 34, weight: .bold, design: .rounded))
-                                
-                                HStack(spacing: 12) {
-                                    Button {
-                                        startTimer(seconds: timerRegularSec)
-                                    } label: { Label("Start Regular", systemImage: "timer") }
-                                    
-                                    Button {
-                                        startTimer(seconds: timerBBBsec)
-                                    } label: { Label("Start BBB", systemImage: "timer") }
-                                }
-                                .buttonStyle(.bordered)
-                                
-                                HStack(spacing: 12) {
-                                    Button(timerRunning ? "Pause" : "Resume") {
-                                        if timerRunning { pauseTimer() }
-                                        else { startTimer(seconds: max(timerRemaining, 1)) }
-                                    }
-                                    .buttonStyle(.bordered)
-                                    
-                                    Button("Reset", role: .destructive) { resetTimer() }
-                                        .buttonStyle(.bordered)
-                                }
-                            }
-                            .padding()
-                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                            
-                            // --- BBB / Lat Pulldown (on Row day) ---
-                            Divider().padding(.vertical, 4)
-                            let bbbWeight = roundToInc(tm * bbbPct)
-                            
-                            if scheme.showBBB {
-                                // Label switches on Row day
-                                Text(selectedLift == .row
-                                     ? "Assistance — Lat Pulldown 5×10 @ \(Int(bbbPct * 100))% TM (Row)"
-                                     : "Assistance — BBB 5×10 @ \(Int(bbbPct * 100))% TM")
-                                .font(.headline)
-                                
-                                // Reuse SetRow; hide per-side plates on Row day (pulldown)
-                                SetRow(
-                                    label: "BBB Set 1 ×10",
-                                    weight: bbbWeight,
-                                    perSide: (selectedLift == .row) ? [] : platesFor(target: bbbWeight),
-                                    done: setBinding(4),
-                                    onCheck: { checked in if checked { startTimer(seconds: timerBBBsec) } }
-                                )
-                                
-                                SetRow(
-                                    label: "BBB Set 2 ×10",
-                                    weight: bbbWeight,
-                                    perSide: (selectedLift == .row) ? [] : platesFor(target: bbbWeight),
-                                    done: setBinding(5),
-                                    onCheck: { checked in if checked { startTimer(seconds: timerBBBsec) } }
-                                )
-                                
-                                SetRow(
-                                    label: "BBB Set 3 ×10",
-                                    weight: bbbWeight,
-                                    perSide: (selectedLift == .row) ? [] : platesFor(target: bbbWeight),
-                                    done: setBinding(6),
-                                    onCheck: { checked in if checked { startTimer(seconds: timerBBBsec) } }
-                                )
-                                
-                                SetRow(
-                                    label: "BBB Set 4 ×10",
-                                    weight: bbbWeight,
-                                    perSide: (selectedLift == .row) ? [] : platesFor(target: bbbWeight),
-                                    done: setBinding(7),
-                                    onCheck: { checked in if checked { startTimer(seconds: timerBBBsec) } }
-                                )
-                                
-                                SetRow(
-                                    label: "BBB Set 5 ×10",
-                                    weight: bbbWeight,
-                                    perSide: (selectedLift == .row) ? [] : platesFor(target: bbbWeight),
-                                    done: setBinding(8),
-                                    onCheck: { checked in if checked { startTimer(seconds: timerBBBsec) } }
-                                )
-                            } else{
-                                Text("Deload week: skip BBB/assistance and add ~30 min easy cardio.")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .onChange(of: liveRepsText) { _, new in
-                            saveReps(new, for: selectedLift)
-                        }
-                        .onAppear {
-                            liveRepsText = repsText(for: selectedLift)
-                        }
+                        Text("v0.0.8 • Final Optimization")
+                            .font(.footnote)
+                            .foregroundStyle(.tertiary)
                     }
-                    .padding()
-                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
-                    .padding(.horizontal)
-                    
-                    // --- Assistance ---
-                    
-                    Divider().padding(.vertical, 6)
-                    
-                    let a = assistanceFor(selectedLift)
-                    if weekScheme(currentWeek).showBBB {
-                        Text("Assistance — \(a.title)")
-                            .font(.headline)
-                        
-                        if a.defaultBarWeight > 0 {
-                            HStack {
-                                Text("Assistance Weight (total):")
-                                Spacer()
-                                TextField("\(Int(max(a.defaultBarWeight, 0)))",
-                                          value: assistWeightBinding(for: selectedLift),
-                                          format: .number)
-                                .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
-                                .frame(width: 80)
-                                Text("lb")
-                            }
-                        }
-                        
-                        ForEach(1...3, id: \.self) { i in
-                            let totalAssistWeight = roundToInc(max(
-                                assistWeightBinding(for: selectedLift).wrappedValue,
-                                a.defaultBarWeight
-                            ))
-                            let perSidePlates: [Double] =
-                            a.defaultBarWeight > 0
-                            ? (a.useEZBar ? platesForEZ(target: totalAssistWeight)
-                               : platesFor(target: totalAssistWeight))
-                            : []
-                            SetRow(
-                                label: "Set \(i) ×\(a.defaultReps)",
-                                weight: totalAssistWeight,
-                                perSide: perSidePlates,
-                                done: assistSetBinding(i),
-                                onCheck: { checked in
-                                    if checked { startTimer(seconds: timerBBBsec) }
-                                }
-                            )
-                        }
-                    }
-                    
-                    // ===== Workout Summary =====
-                    Divider().padding(.vertical, 8)
-                    
-                    let metrics = currentWorkoutMetrics()
-                    
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text("Workout Summary").font(.headline)
-                            Spacer()
-                            Text(Date.now, style: .date).foregroundStyle(.secondary)
-                        }
-                        
-                        if metrics.est > 0 {
-                            Text("Estimated 1RM: \(Int(metrics.est)) lb")
-                        } else {
-                            Text("Estimated 1RM: —").foregroundStyle(.secondary)
-                        }
-                        
-                        Text("Total Volume: \(metrics.totalVol) lb")
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.top, 2)
-                        
-                        Text("Main: \(metrics.mainVol) lb  •  BBB: \(metrics.bbbVol) lb  •  Assist: \(metrics.assistVol) lb")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding()
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                    
-                    // ===== Finish Workout =====
-                    Button {
-                        let metrics = currentWorkoutMetrics()
-                        let entry = WorkoutEntry(
-                            date: .now,
-                            lift: selectedLift.label,
-                            est1RM: metrics.est,
-                            totalVolume: metrics.totalVol,
-                            bbbPct: bbbPct,
-                            amrapReps: currentAMRAP,
-                            notes: workoutNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : workoutNotes
-                        )
-                        WorkoutStore.shared.append(entry)
-                        
-                        // 🔹 Clear only the notes field - checkmarks remain
-                        workoutNotes = ""
-                        
-                        // 👇 Auto-advance week if enabled
-                        if autoAdvanceWeek {
-                            currentWeek = currentWeek % 4 + 1
-                        }
-                        
-                        showSavedAlert = true
-                    } label: {
-                        Label("Finish Workout", systemImage: "checkmark.seal.fill")
-                            .font(.headline)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    
-                    // ===== Reset Workout =====
-                    
-                    Divider().padding(.vertical, 6)
-                    
-                    Button(role: .destructive) {
-                        showResetConfirm = true
-                    } label: {
-                        Label("Reset Workout (Current Lift)", systemImage: "arrow.uturn.backward")
-                    }
-                    
-                    Text("v0.0.5 • Dev Build")
-                        .font(.footnote)
-                        .foregroundStyle(.tertiary)
+                    .padding(.vertical)
                 }
-                .padding(.vertical)
             }
             .navigationTitle("5/3/1 • Beyond Normal")
             .toolbar {
@@ -535,36 +429,365 @@ struct ContentView: View {
         .alert("Reset current lift?", isPresented: $showResetConfirm) {
             Button("Reset", role: .destructive) {
                 resetCurrentLift()
-                workoutNotes = ""
-                liveRepsText = ""
             }
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("This will clear all sets (main, BBB, assistance), AMRAP reps, and workout notes for \(selectedLift.label).")
         }
-        .alert("Saved!", isPresented: $showSavedAlert) {
+        .alert("Saved!", isPresented: $showSavedAlert, presenting: savedAlertText) { _ in
             Button("OK", role: .cancel) { }
-        } message: {
-            Text("Logged \(selectedLift.label) • Est 1RM \(Int(currentWorkoutMetrics().est)) • Volume \(currentWorkoutMetrics().totalVol) lb")
-        }
-        .onReceive(tick) { _ in
-            guard timerRunning, let end = timerEnd else { return }
-            let left = max(0, Int(end.timeIntervalSinceNow.rounded()))
-            timerRemaining = left
-            if left == 0 {
-                timerRunning = false
-                timerEnd = nil
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
-            }
+        } message: { text in
+            Text(text)
         }
         .onAppear {
             let center = UNUserNotificationCenter.current()
             center.delegate = LocalNotifDelegate.shared
             requestNotifsIfNeeded()
+            liveRepsText = repsText(for: selectedLift)
+        }
+        .onChange(of: selectedLift) { _, new in
+            liveRepsText = repsText(for: new)
+        }
+        .onChange(of: liveRepsText) { _, new in
+            saveReps(new, for: selectedLift)
         }
     }
     
-    // MARK: - Types & helpers
+    // MARK: - Subviews
+    
+    private var headerView: some View {
+        Group {
+            if UIImage(named: "BeyondNormalLogo") != nil {
+                Image("BeyondNormalLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 220)
+                    .accessibilityLabel("Beyond Normal")
+            } else {
+                Text("Beyond Normal")
+                    .font(.largeTitle.weight(.bold))
+                    .padding(.horizontal)
+            }
+        }
+    }
+    
+    private var trainingMaxesView: some View {
+        VStack(spacing: 6) {
+            Text("Training Maxes (lb)").font(.headline)
+            Text("SQ \(intOrDash(tmSquat))  •  BP \(intOrDash(tmBench))  •  DL \(intOrDash(tmDeadlift))  •  ROW \(intOrDash(tmRow))")
+                .foregroundStyle(.secondary)
+        }
+    }
+    
+    private var quickTargetView: some View {
+        let tmSel = tmFor(selectedLift)
+        let scheme = weekScheme(currentWeek)
+        let topPct = scheme.main.last?.pct ?? 0.85
+        let topW = calculator.round(tmSel * topPct)
+        
+        return VStack(spacing: 4) {
+            Text("Week \(currentWeek) • \(selectedLift.label)")
+                .font(.headline)
+            Text("\(scheme.topLine) → \(intOrDash(topW)) lb")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(.blue)
+        }
+        .padding(.top, 6)
+    }
+    
+    private var prDisclosureView: some View {
+        let tmSel = tmFor(selectedLift)
+        
+        return DisclosureGroup(isExpanded: $showPRs) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Week 1: 85% × 5+ → \(int(calculator.round(tmSel * 0.85))) lb")
+                Text("Week 2: 90% × 3+ → \(int(calculator.round(tmSel * 0.90))) lb")
+                Text("Week 3: 95% × 1+ → \(int(calculator.round(tmSel * 0.95))) lb")
+            }
+            .padding(.top, 4)
+        } label: {
+            Text("PR sets • \(selectedLift.label)")
+                .font(.headline)
+        }
+    }
+    
+    private var workoutBlockView: some View {
+        let tm = tmFor(selectedLift)
+        let scheme = weekScheme(currentWeek)
+        
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Week \(currentWeek) Workout")
+                    .font(.title3.weight(.bold))
+                Spacer()
+                Picker("Week", selection: $currentWeek) {
+                    Text("1").tag(1); Text("2").tag(2); Text("3").tag(3); Text("4").tag(4);
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 220)
+            }
+            
+            Picker("Lift", selection: $selectedLift) {
+                ForEach(Lift.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            
+            mainSetsView(tm: tm, scheme: scheme)
+            notesView
+            timerView
+            bbbSetsView(tm: tm, scheme: scheme)
+        }
+        .padding()
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal)
+    }
+    
+    private func mainSetsView(tm: Double, scheme: WeekSchemeResult) -> some View {
+        let s0 = scheme.main[0], s1 = scheme.main[1], s2 = scheme.main[2]
+        let w0 = calculator.round(tm * s0.pct)
+        let w1 = calculator.round(tm * s1.pct)
+        let w2 = calculator.round(tm * s2.pct)
+        
+        return Group {
+            SetRow(
+                label: "\(Int(s0.pct * 100))% × \(s0.reps)",
+                weight: w0,
+                perSide: calculator.plates(target: w0),
+                done: setBinding(1),
+                onCheck: { checked in if checked { timer.start(seconds: timerRegularSec) } }
+            )
+            
+            SetRow(
+                label: "\(Int(s1.pct * 100))% × \(s1.reps)",
+                weight: w1,
+                perSide: calculator.plates(target: w1),
+                done: setBinding(2),
+                onCheck: { checked in if checked { timer.start(seconds: timerRegularSec) } }
+            )
+            
+            if s2.amrap {
+                AMRAPRow(
+                    label: "\(Int(s2.pct * 100))% × \(s2.reps)+",
+                    weight: w2,
+                    perSide: calculator.plates(target: w2),
+                    done: setBinding(3),
+                    reps: $liveRepsText,
+                    est1RM: est1RM(for: selectedLift, weight: w2),
+                    onCheck: { checked in if checked { timer.start(seconds: timerRegularSec) } },
+                    focus: $amrapFocused
+                )
+            } else {
+                SetRow(
+                    label: "\(Int(s2.pct * 100))% × \(s2.reps)",
+                    weight: w2,
+                    perSide: calculator.plates(target: w2),
+                    done: setBinding(3),
+                    onCheck: { checked in if checked { timer.start(seconds: timerRegularSec) } }
+                )
+                Text("Deload week: skip BBB/assistance and add 10–20 min easy cardio.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+    
+    private var notesView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Workout Notes").font(.headline)
+                Spacer()
+                Text("saved with history").font(.caption).foregroundStyle(.secondary)
+            }
+            
+            // Replace TextEditor with TextField for better performance
+            TextField("Add notes about today's workout...", text: $workoutNotes, axis: .vertical)
+                .textFieldStyle(.plain)
+                .lineLimit(3...6)
+                .padding(8)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                .autocorrectionDisabled()
+                .onChange(of: workoutNotes) { _, newValue in
+                    // Debounce to prevent excessive updates
+                    notesDebounceTask?.cancel()
+                    notesDebounceTask = Task {
+                        try? await Task.sleep(nanoseconds: 300_000_000) // 0.3s
+                        if !Task.isCancelled {
+                            debouncedNotes = newValue
+                        }
+                    }
+                }
+        }
+    }
+    
+    private var timerView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Rest Timer").font(.headline)
+                Spacer()
+                Text(timer.isRunning ? "Running" : "Ready")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            
+            Text(timer.remaining > 0 ? mmss(timer.remaining) :
+                    "Ready (\(mmss(timerRegularSec)) / \(mmss(timerBBBsec)))")
+            .font(.system(size: 34, weight: .bold, design: .rounded))
+            
+            HStack(spacing: 12) {
+                Button {
+                    timer.start(seconds: timerRegularSec)
+                } label: { Label("Start Regular", systemImage: "timer") }
+                
+                Button {
+                    timer.start(seconds: timerBBBsec)
+                } label: { Label("Start BBB", systemImage: "timer") }
+            }
+            .buttonStyle(.bordered)
+            
+            HStack(spacing: 12) {
+                Button(timer.isRunning ? "Pause" : "Resume") {
+                    if timer.isRunning { timer.pause() }
+                    else { timer.start(seconds: max(timer.remaining, 1)) }
+                }
+                .buttonStyle(.bordered)
+                
+                Button("Reset", role: .destructive) { timer.reset() }
+                    .buttonStyle(.bordered)
+            }
+        }
+        .padding()
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+    }
+    
+    private func bbbSetsView(tm: Double, scheme: WeekSchemeResult) -> some View {
+        Group {
+            if scheme.showBBB {
+                Divider().padding(.vertical, 4)
+                let bbbWeight = calculator.round(tm * bbbPct)
+                
+                Text(selectedLift == .row
+                     ? "Assistance — Lat Pulldown 5×10 @ \(Int(bbbPct * 100))% TM (Row)"
+                     : "Assistance — BBB 5×10 @ \(Int(bbbPct * 100))% TM")
+                .font(.headline)
+                
+                ForEach(4...8, id: \.self) { setNum in
+                    SetRow(
+                        label: "BBB Set \(setNum - 3) ×10",
+                        weight: bbbWeight,
+                        perSide: (selectedLift == .row) ? [] : calculator.plates(target: bbbWeight),
+                        done: setBinding(setNum),
+                        onCheck: { checked in if checked { timer.start(seconds: timerBBBsec) } }
+                    )
+                }
+            } else {
+                Text("Deload week: skip BBB/assistance and add ~30 min easy cardio.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+    
+    private var assistanceView: some View {
+        let scheme = weekScheme(currentWeek)
+        let a = assistanceFor(selectedLift)
+        
+        return Group {
+            if scheme.showBBB {
+                Divider().padding(.vertical, 6)
+                
+                Text("Assistance — \(a.title)")
+                    .font(.headline)
+                
+                if a.defaultBarWeight > 0 {
+                    HStack {
+                        Text("Assistance Weight (total):")
+                        Spacer()
+                        TextField("\(Int(max(a.defaultBarWeight, 0)))",
+                                  value: assistWeightBinding(for: selectedLift),
+                                  format: .number)
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        Text("lb")
+                    }
+                }
+                
+                ForEach(1...3, id: \.self) { i in
+                    let totalAssistWeight = calculator.round(max(
+                        assistWeightBinding(for: selectedLift).wrappedValue,
+                        a.defaultBarWeight
+                    ))
+                    let perSidePlates: [Double] =
+                    a.defaultBarWeight > 0
+                    ? (a.useEZBar ? calculator.plates(target: totalAssistWeight, barWeight: 25)
+                       : calculator.plates(target: totalAssistWeight))
+                    : []
+                    SetRow(
+                        label: "Set \(i) ×\(a.defaultReps)",
+                        weight: totalAssistWeight,
+                        perSide: perSidePlates,
+                        done: assistSetBinding(i),
+                        onCheck: { checked in
+                            if checked { timer.start(seconds: timerBBBsec) }
+                        }
+                    )
+                }
+            }
+        }
+    }
+    
+    private var summaryView: some View {
+        let metrics = currentWorkoutMetrics()
+        
+        return Group {
+            Divider().padding(.vertical, 8)
+            
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Workout Summary").font(.headline)
+                    Spacer()
+                    Text(Date.now, style: .date).foregroundStyle(.secondary)
+                }
+                
+                if metrics.est > 0 {
+                    Text("Estimated 1RM: \(Int(metrics.est)) lb")
+                } else {
+                    Text("Estimated 1RM: —").foregroundStyle(.secondary)
+                }
+                
+                Text("Total Volume: \(metrics.totalVol) lb")
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.top, 2)
+                
+                Text("Main: \(metrics.mainVol) lb  •  BBB: \(metrics.bbbVol) lb  •  Assist: \(metrics.assistVol) lb")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding()
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+    
+    private var finishButton: some View {
+        Button {
+            finishWorkout()
+        } label: {
+            Label("Finish Workout", systemImage: "checkmark.seal.fill")
+                .font(.headline)
+        }
+        .buttonStyle(.borderedProminent)
+    }
+    
+    private var resetButton: some View {
+        Button(role: .destructive) {
+            showResetConfirm = true
+        } label: {
+            Label("Reset Workout (Current Lift)", systemImage: "arrow.uturn.backward")
+        }
+    }
+    
+    // MARK: - Types
     
     private enum Lift: String, CaseIterable, Identifiable {
         case squat = "SQ", bench = "BP", deadlift = "DL", row = "RW"
@@ -587,6 +810,16 @@ struct ContentView: View {
         let useEZBar: Bool
     }
     
+    private struct SetScheme { let pct: Double; let reps: Int; let amrap: Bool }
+    
+    private struct WeekSchemeResult {
+        let main: [SetScheme]
+        let showBBB: Bool
+        let topLine: String
+    }
+    
+    // MARK: - Helpers
+    
     private func assistanceFor(_ lift: Lift) -> AssistanceDef {
         switch lift {
         case .squat:    return .init(title: "Hanging Leg Raise", defaultBarWeight: 0,  defaultSets: 3, defaultReps: 12, useEZBar: false)
@@ -605,112 +838,59 @@ struct ContentView: View {
         }
     }
     
-    private enum TMProgressionStyle: String, CaseIterable {
-        case classic, auto
-        var label: String {
-            switch self {
-            case .classic: return "Classic (+5/+10)"
-            case .auto:    return "Auto (90% of 1RM)"
-            }
-        }
-    }
-    private var tmProgStyle: TMProgressionStyle {
-        TMProgressionStyle(rawValue: tmProgStyleRaw) ?? .classic
-    }
-    
-    private struct SetScheme { let pct: Double; let reps: Int; let amrap: Bool }
-    
-    private func weekScheme(_ week: Int) -> (main: [SetScheme], showBBB: Bool, topLine: String) {
+    private func weekScheme(_ week: Int) -> WeekSchemeResult {
         switch week {
         case 2:
-            // 70×3, 80×3, 90×3+
-            return ([.init(pct:0.70, reps:3, amrap:false),
-                     .init(pct:0.80, reps:3, amrap:false),
-                     .init(pct:0.90, reps:3, amrap:true)],
-                    true,
-                    "90% × 3+")
+            return .init(
+                main: [.init(pct:0.70, reps:3, amrap:false),
+                       .init(pct:0.80, reps:3, amrap:false),
+                       .init(pct:0.90, reps:3, amrap:true)],
+                showBBB: true,
+                topLine: "90% × 3+"
+            )
         case 3:
-            // 75×5, 85×3, 95×1+
-            return ([.init(pct:0.75, reps:5, amrap:false),
-                     .init(pct:0.85, reps:3, amrap:false),
-                     .init(pct:0.95, reps:1, amrap:true)],
-                    true,
-                    "95% × 1+")
+            return .init(
+                main: [.init(pct:0.75, reps:5, amrap:false),
+                       .init(pct:0.85, reps:3, amrap:false),
+                       .init(pct:0.95, reps:1, amrap:true)],
+                showBBB: true,
+                topLine: "95% × 1+"
+            )
         case 4:
-            // Deload 40/50/60 ×5 (no AMRAP, no BBB, no Assistance)
-            return ([.init(pct:0.40, reps:5, amrap:false),
-                     .init(pct:0.50, reps:5, amrap:false),
-                     .init(pct:0.60, reps:5, amrap:false)],
-                    false,
-                    "Deload: 60% × 5")
+            return .init(
+                main: [.init(pct:0.40, reps:5, amrap:false),
+                       .init(pct:0.50, reps:5, amrap:false),
+                       .init(pct:0.60, reps:5, amrap:false)],
+                showBBB: false,
+                topLine: "Deload: 60% × 5"
+            )
         default:
-            // Week 1: 65×5, 75×5, 85×5+
-            return ([.init(pct:0.65, reps:5, amrap:false),
-                     .init(pct:0.75, reps:5, amrap:false),
-                     .init(pct:0.85, reps:5, amrap:true)],
-                    true,
-                    "85% × 5+")
+            return .init(
+                main: [.init(pct:0.65, reps:5, amrap:false),
+                       .init(pct:0.75, reps:5, amrap:false),
+                       .init(pct:0.85, reps:5, amrap:true)],
+                showBBB: true,
+                topLine: "85% × 5+"
+            )
         }
     }
     
-    // MARK: - Workout State Helpers (NEW)
-    private func readWorkoutState() -> [String: String] {
-        guard let data = workoutStateJSON.data(using: .utf8),
-              let dict = try? JSONDecoder().decode([String: String].self, from: data) else {
-            return [:]
-        }
-        return dict
+    private func setBinding(_ num: Int) -> Binding<Bool> {
+        return Binding(
+            get: { self.workoutState.getSetComplete(lift: self.selectedLift.rawValue, week: self.currentWeek, set: num) },
+            set: { newValue in
+                self.workoutState.setSetComplete(lift: self.selectedLift.rawValue, week: self.currentWeek, set: num, value: newValue)
+            }
+        )
     }
     
-    private func writeWorkoutState(_ dict: [String: String]) {
-        if let data = try? JSONEncoder().encode(dict),
-           let json = String(data: data, encoding: .utf8) {
-            workoutStateJSON = json
-        }
-    }
-    
-    private func stateKey(lift: Lift, week: Int, type: String, num: Int) -> String {
-        "\(lift.rawValue)_w\(week)_\(type)\(num)"
-    }
-    
-    private func getSetComplete(lift: Lift, week: Int, set: Int) -> Bool {
-        let key = stateKey(lift: lift, week: week, type: "set", num: set)
-        return readWorkoutState()[key] == "true"
-    }
-    
-    private func setSetComplete(lift: Lift, week: Int, set: Int, value: Bool) {
-        var state = readWorkoutState()
-        let key = stateKey(lift: lift, week: week, type: "set", num: set)
-        state[key] = value ? "true" : "false"
-        writeWorkoutState(state)
-    }
-    
-    private func getAssistComplete(lift: Lift, week: Int, set: Int) -> Bool {
-        let key = stateKey(lift: lift, week: week, type: "assist", num: set)
-        return readWorkoutState()[key] == "true"
-    }
-    
-    private func setAssistComplete(lift: Lift, week: Int, set: Int, value: Bool) {
-        var state = readWorkoutState()
-        let key = stateKey(lift: lift, week: week, type: "assist", num: set)
-        state[key] = value ? "true" : "false"
-        writeWorkoutState(state)
-    }
-    
-    private func getAMRAP(lift: Lift, week: Int) -> Int {
-        let key = "\(lift.rawValue)_w\(week)_amrap"
-        return Int(readWorkoutState()[key] ?? "0") ?? 0
-    }
-    
-    private func setAMRAP(lift: Lift, week: Int, reps: Int) {
-        var state = readWorkoutState()
-        let key = "\(lift.rawValue)_w\(week)_amrap"
-        state[key] = String(reps)
-        writeWorkoutState(state)
-    }
-    
-    private func isAssistCompleted(_ n: Int) -> Bool {
-        return getAssistComplete(lift: selectedLift, week: currentWeek, set: n)
+    private func assistSetBinding(_ n: Int) -> Binding<Bool> {
+        return Binding(
+            get: { self.workoutState.getAssistComplete(lift: self.selectedLift.rawValue, week: self.currentWeek, set: n) },
+            set: { newValue in
+                self.workoutState.setAssistComplete(lift: self.selectedLift.rawValue, week: self.currentWeek, set: n, value: newValue)
+            }
+        )
     }
     
     private func assistWeightBinding(for lift: Lift) -> Binding<Double> {
@@ -722,168 +902,121 @@ struct ContentView: View {
         }
     }
     
-    private func assistSetBinding(_ n: Int) -> Binding<Bool> {
-        return Binding(
-            get: { self.getAssistComplete(lift: self.selectedLift, week: self.currentWeek, set: n) },
-            set: { newValue in
-                self.setAssistComplete(lift: self.selectedLift, week: self.currentWeek, set: n, value: newValue)
-            }
-        )
-    }
-    
-    private func setBinding(_ num: Int) -> Binding<Bool> {
-        return Binding(
-            get: { self.getSetComplete(lift: self.selectedLift, week: self.currentWeek, set: num) },
-            set: { newValue in
-                self.setSetComplete(lift: self.selectedLift, week: self.currentWeek, set: num, value: newValue)
-            }
-        )
-    }
-    
-    private func platesForEZ(target: Double) -> [Double] {
-        let ezBarWeight = 25.0
-        guard target >= ezBarWeight else { return [] }
-        var remainingPerSide = (target - ezBarWeight) / 2.0
-        var out: [Double] = []
-        for p in plateInventory.sorted(by: >) {
-            while remainingPerSide + 1e-9 >= p {
-                out.append(p)
-                remainingPerSide -= p
-            }
-        }
-        return out
-    }
-    
-    private func int(_ x: Double) -> String {
-        x.rounded() == x ? String(format: "%.0f", x) : String(format: "%.1f", x)
-    }
-    
-    private func roundToInc(_ x: Double) -> Double {
-        (x / roundTo).rounded() * roundTo
-    }
-    
-    private func platesFor(target: Double) -> [Double] {
-        guard target >= barWeight else { return [] }
-        var remainingPerSide = (target - barWeight) / 2.0
-        var out: [Double] = []
-        for p in plateInventory.sorted(by: >) {
-            while remainingPerSide + 1e-9 >= p {
-                out.append(p)
-                remainingPerSide -= p
-            }
-        }
-        return out
-    }
-    
     private func resetCurrentLift() {
-        // Clear all sets for current lift and week
-        for setNum in 1...8 {
-            setSetComplete(lift: selectedLift, week: currentWeek, set: setNum, value: false)
-        }
+        workoutState.resetLift(lift: selectedLift.rawValue, week: currentWeek)
+        workoutNotes = ""
+        liveRepsText = ""
         
-        // Clear assistance sets
-        for setNum in 1...3 {
-            setAssistComplete(lift: selectedLift, week: currentWeek, set: setNum, value: false)
-        }
-        
-        // Clear AMRAP
-        setAMRAP(lift: selectedLift, week: currentWeek, reps: 0)
-        
-        // Reset assistance weight to defaults
         switch selectedLift {
-        case .squat:
-            assistWeightSquat = 0
-        case .bench:
-            assistWeightBench = 65
-        case .deadlift:
-            assistWeightDeadlift = 0
-        case .row:
-            assistWeightRow = 0
+        case .squat:    assistWeightSquat = 0
+        case .bench:    assistWeightBench = 65
+        case .deadlift: assistWeightDeadlift = 0
+        case .row:      assistWeightRow = 0
         }
     }
     
-    // Returns whether a given row is completed for the currently selected lift and week
-    private func isCompleted(_ num: Int) -> Bool {
-        return getSetComplete(lift: selectedLift, week: currentWeek, set: num)
+    private func repsText(for lift: Lift) -> String {
+        let r = workoutState.getAMRAP(lift: lift.rawValue, week: currentWeek)
+        return r == 0 ? "" : String(r)
     }
     
-    // Numeric AMRAP reps for the current lift and week
-    private var currentAMRAP: Int {
-        return getAMRAP(lift: selectedLift, week: currentWeek)
+    private func saveReps(_ text: String, for lift: Lift) {
+        let r = Int(text) ?? 0
+        workoutState.setAMRAP(lift: lift.rawValue, week: currentWeek, reps: r)
+    }
+    
+    private func est1RM(for lift: Lift, weight: Double) -> Double {
+        let reps = workoutState.getAMRAP(lift: lift.rawValue, week: currentWeek)
+        guard reps > 0 else { return 0 }
+        let est = weight * (1 + Double(reps) / 30.0)
+        return calculator.round(est)
     }
     
     private func currentWorkoutMetrics() -> (est: Double, totalVol: Int, mainVol: Int, bbbVol: Int, assistVol: Int) {
         let scheme = weekScheme(currentWeek)
         let tmSel = tmFor(selectedLift)
         
-        // MAIN sets (use weekScheme, only AMRAP if scheme says so)
+        // MAIN sets
         func mainSetVol(_ idx: Int) -> Double {
             let s = scheme.main[idx]
-            let w = roundToInc(tmSel * s.pct)
-            let reps = s.amrap ? Double(max(currentAMRAP, 0)) : Double(s.reps)
+            let w = calculator.round(tmSel * s.pct)
+            let reps = s.amrap ? Double(max(workoutState.getAMRAP(lift: selectedLift.rawValue, week: currentWeek), 0)) : Double(s.reps)
             return w * reps
         }
         let mainVol = Int(mainSetVol(0) + mainSetVol(1) + mainSetVol(2))
         
-        // BBB volume only if allowed
-        let bbbW = roundToInc(tmSel * bbbPct)
+        // BBB volume
+        let bbbW = calculator.round(tmSel * bbbPct)
         let bbbPerSet = scheme.showBBB ? bbbW * 10 : 0
-        let b1 = isCompleted(4) ? bbbPerSet : 0
-        let b2 = isCompleted(5) ? bbbPerSet : 0
-        let b3 = isCompleted(6) ? bbbPerSet : 0
-        let b4 = isCompleted(7) ? bbbPerSet : 0
-        let b5 = isCompleted(8) ? bbbPerSet : 0
-        let bbbVol = Int(b1 + b2 + b3 + b4 + b5)
+        var bbbVol = 0.0
+        for setNum in 4...8 {
+            if workoutState.getSetComplete(lift: selectedLift.rawValue, week: currentWeek, set: setNum) {
+                bbbVol += bbbPerSet
+            }
+        }
         
-        // Assistance volume only if allowed
+        // Assistance volume
         let assistDef = assistanceFor(selectedLift)
         let assistW = max(assistWeightBinding(for: selectedLift).wrappedValue, assistDef.defaultBarWeight)
-        let a1 = (scheme.showBBB && isAssistCompleted(1)) ? assistW * Double(assistDef.defaultReps) : 0
-        let a2 = (scheme.showBBB && isAssistCompleted(2)) ? assistW * Double(assistDef.defaultReps) : 0
-        let a3 = (scheme.showBBB && isAssistCompleted(3)) ? assistW * Double(assistDef.defaultReps) : 0
-        let assistVol = Int(a1 + a2 + a3)
+        var assistVol = 0.0
+        for setNum in 1...3 {
+            if scheme.showBBB && workoutState.getAssistComplete(lift: selectedLift.rawValue, week: currentWeek, set: setNum) {
+                assistVol += assistW * Double(assistDef.defaultReps)
+            }
+        }
         
-        let totalVol = mainVol + bbbVol + assistVol
+        let totalVol = Int(mainVol) + Int(bbbVol) + Int(assistVol)
         
-        // Est 1RM: only meaningful on AMRAP weeks (s.main[2] is the top set)
+        // Est 1RM
         let top = scheme.main[2]
         let est: Double = {
-            guard top.amrap, currentAMRAP > 0 else { return 0 }
-            let w = roundToInc(tmSel * top.pct)
-            let e = w * (1 + Double(currentAMRAP) / 30.0)
-            return roundToInc(e)
+            guard top.amrap else { return 0 }
+            let amrapReps = workoutState.getAMRAP(lift: selectedLift.rawValue, week: currentWeek)
+            guard amrapReps > 0 else { return 0 }
+            let w = calculator.round(tmSel * top.pct)
+            let e = w * (1 + Double(amrapReps) / 30.0)
+            return calculator.round(e)
         }()
         
-        return (est, totalVol, mainVol, bbbVol, assistVol)
+        return (est, totalVol, Int(mainVol), Int(bbbVol), Int(assistVol))
     }
     
-    // 1 Hz tick
-    private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-    
-    private func startTimer(seconds: Int) {
-        timerEnd = Date().addingTimeInterval(TimeInterval(seconds))
-        timerRemaining = seconds
-        timerRunning = true
-        requestNotifsIfNeeded()
-        scheduleDoneNotification(in: seconds)
-    }
-    
-    private func pauseTimer() {
-        timerRunning = false
-        timerEnd = nil
-        cancelDoneNotification()
-    }
-    
-    private func resetTimer() {
-        timerRunning = false
-        timerEnd = nil
-        timerRemaining = 0
-        cancelDoneNotification()
-    }
-    
-    private func mmss(_ s: Int) -> String {
-        let m = s / 60, r = s % 60
-        return String(format: "%d:%02d", m, r)
+    private func finishWorkout() {
+        let metrics = currentWorkoutMetrics()
+        let liftLabel = selectedLift.label
+        
+        savedAlertText = String(
+            format: "Logged %@ • Est 1RM %@ • Volume %@ lb",
+            liftLabel,
+            Int(metrics.est).formatted(.number),
+            metrics.totalVol.formatted(.number)
+        )
+        
+        let entry = WorkoutEntry(
+            date: .now,
+            lift: selectedLift.label,
+            est1RM: metrics.est,
+            totalVolume: metrics.totalVol,
+            bbbPct: bbbPct,
+            amrapReps: workoutState.getAMRAP(lift: selectedLift.rawValue, week: currentWeek),
+            notes: workoutNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : workoutNotes
+        )
+        WorkoutStore.shared.append(entry)
+        
+        timer.reset()
+        workoutNotes = ""
+        
+        if autoAdvanceWeek {
+            workoutState.markLiftComplete(selectedLift.rawValue, week: currentWeek)
+            
+            if workoutState.allLiftsComplete(for: currentWeek, totalLifts: Lift.allCases.count) {
+                currentWeek = currentWeek % 4 + 1
+                workoutState.resetCompletedLifts(for: currentWeek)
+                savedAlertText += "\nAll lifts complete — advancing to Week \(currentWeek)!"
+            }
+        }
+        
+        showSavedAlert = true
     }
     
     private func requestNotifsIfNeeded() {
@@ -895,135 +1028,21 @@ struct ContentView: View {
         }
     }
     
-    private func scheduleDoneNotification(in seconds: Int) {
-        let content = UNMutableNotificationContent()
-        content.title = "Rest finished"
-        content.body = "Time to lift \(selectedLift.label)."
-        content.sound = UNNotificationSound.default
-        
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(seconds), repeats: false)
-        let req = UNNotificationRequest(identifier: "rest-timer", content: content, trigger: trigger)
-        UNUserNotificationCenter.current().add(req)
+    private func mmss(_ s: Int) -> String {
+        let m = s / 60, r = s % 60
+        return String(format: "%d:%02d", m, r)
     }
     
-    private func cancelDoneNotification() {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["rest-timer"])
+    private func int(_ x: Double) -> String {
+        x.rounded() == x ? String(format: "%.0f", x) : String(format: "%.1f", x)
     }
     
-    // AMRAP helpers
-    private func repsText(for lift: Lift) -> String {
-        let r = getAMRAP(lift: lift, week: currentWeek)
-        return r == 0 ? "" : String(r)
+    private func intOrDash(_ x: Double) -> String {
+        guard x.isFinite else { return "—" }
+        return x.rounded() == x ? String(format: "%.0f", x) : String(format: "%.1f", x)
     }
     
-    private func saveReps(_ text: String, for lift: Lift) {
-        let r = Int(text) ?? 0
-        setAMRAP(lift: lift, week: currentWeek, reps: r)
-    }
-    
-    private func est1RM(for lift: Lift, weight: Double) -> Double {
-        let reps = getAMRAP(lift: lift, week: currentWeek)
-        guard reps > 0 else { return 0 }
-        let est = weight * (1 + Double(reps) / 30.0)
-        return roundToInc(est)
-    }
-    
-    private struct HistorySheet: View {
-        @State private var entries: [WorkoutEntry] = []
-        @State private var expanded: Set<UUID> = []
-        
-        var body: some View {
-            NavigationStack {
-                List {
-                    if entries.isEmpty {
-                        ContentUnavailableView("No saved workouts yet",
-                                               systemImage: "tray",
-                                               description: Text("Tap \"Finish Workout\" after a session to log it here."))
-                    } else {
-                        ForEach(entries.sorted(by: { $0.date > $1.date })) { e in
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Text(e.lift).font(.headline)
-                                    Spacer()
-                                    Text(format(date: e.date))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                HStack(spacing: 16) {
-                                    Text("Est 1RM \(Int(e.est1RM)) lb")
-                                    Text("Volume \(e.totalVolume) lb")
-                                }
-                                .font(.subheadline)
-                                .foregroundStyle(.primary)
-                                
-                                HStack(spacing: 12) {
-                                    Text("BBB \(Int(e.bbbPct * 100))%")
-                                    Text("AMRAP \(e.amrapReps)")
-                                }
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                
-                                if let n = e.notes, !n.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                    Text(n)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(expanded.contains(e.id) ? nil : 2)
-                                        .padding(.top, 2)
-                                    
-                                    Button(expanded.contains(e.id) ? "Show less" : "Show more") {
-                                        if expanded.contains(e.id) { expanded.remove(e.id) } else { expanded.insert(e.id) }
-                                    }
-                                    .font(.caption)
-                                    .buttonStyle(.plain)
-                                    .padding(.top, 2)
-                                }
-                            }
-                            .padding(.vertical, 4)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                if expanded.contains(e.id) { expanded.remove(e.id) } else { expanded.insert(e.id) }
-                            }
-                            .swipeActions {
-                                Button(role: .destructive) {
-                                    delete(e)
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
-                        }
-                    }
-                }
-                .navigationTitle("Saved Workouts")
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            entries = WorkoutStore.shared.load().sorted { $0.date > $1.date }
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                        .accessibilityLabel("Refresh")
-                    }
-                }
-                .onAppear {
-                    entries = WorkoutStore.shared.load().sorted { $0.date > $1.date }
-                }
-            }
-        }
-        
-        private func format(date: Date) -> String {
-            let f = DateFormatter()
-            f.dateStyle = .medium
-            f.timeStyle = .short
-            return f.string(from: date)
-        }
-        
-        private func delete(_ entry: WorkoutEntry) {
-            WorkoutStore.shared.delete(id: entry.id)
-            entries.removeAll { $0.id == entry.id }
-        }
-    }
-    
-    // MARK: - Rows
+    // MARK: - Row Components
     
     private struct SetRow: View {
         let label: String
@@ -1064,8 +1083,8 @@ struct ContentView: View {
         @Binding var reps: String
         let est1RM: Double
         var onCheck: ((Bool) -> Void)? = nil
-        @FocusState private var isFocused: Bool
-        
+        var focus: FocusState<Bool>.Binding
+
         var body: some View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline) {
@@ -1080,29 +1099,29 @@ struct ContentView: View {
                         }
                     }
                 }
-                .onChange(of: done) { _, new in
-                    onCheck?(new)
-                }
-                
+                .onChange(of: done) { _, new in onCheck?(new) }
+
                 HStack {
                     Text("AMRAP reps:")
                     TextField("e.g. 8", text: $reps)
                         .keyboardType(.numberPad)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 80)
-                        .focused($isFocused)
+                        .focused(focus)
+                        .submitLabel(.done)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
                         .onSubmit {
-                            isFocused = false
+                            focus.wrappedValue = false
                         }
-                        .toolbar {
-                            ToolbarItemGroup(placement: .keyboard) {
-                                Spacer()
-                                Button("Done") {
-                                    isFocused = false
-                                }
+                        .onChange(of: reps) { _, s in
+                            // Only allow digits, prevent RTI issues
+                            DispatchQueue.main.async {
+                                let digits = s.filter(\.isNumber)
+                                if digits != s { reps = digits }
                             }
                         }
-                    
+
                     if est1RM > 0 {
                         Spacer()
                         Text("Est 1RM ≈ \(Int(est1RM)) lb")
@@ -1112,171 +1131,270 @@ struct ContentView: View {
                 }
             }
         }
-        
+
         private func plateList(_ ps: [Double]) -> String {
-            ps.map { $0.truncatingRemainder(dividingBy: 1) == 0
-                ? "\(Int($0))"
-                : String(format: "%.1f", $0)
-            }.joined(separator: ", ")
+            ps.map { $0.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int($0))" : String(format: "%.1f", $0) }
+              .joined(separator: ", ")
+        }
+    }
+}
+
+// MARK: - History Sheet
+
+private struct HistorySheet: View {
+    @State private var entries: [WorkoutEntry] = []
+    @State private var expanded: Set<UUID> = []
+    
+    var body: some View {
+        NavigationStack {
+            List {
+                if entries.isEmpty {
+                    ContentUnavailableView("No saved workouts yet",
+                                           systemImage: "tray",
+                                           description: Text("Tap \"Finish Workout\" after a session to log it here."))
+                } else {
+                    ForEach(entries.sorted(by: { $0.date > $1.date })) { e in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(e.lift).font(.headline)
+                                Spacer()
+                                Text(format(date: e.date))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            HStack(spacing: 16) {
+                                Text("Est 1RM \(Int(e.est1RM)) lb")
+                                Text("Volume \(e.totalVolume) lb")
+                            }
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
+                            
+                            HStack(spacing: 12) {
+                                Text("BBB \(Int(e.bbbPct * 100))%")
+                                Text("AMRAP \(e.amrapReps)")
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            
+                            if let n = e.notes, !n.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Text(n)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(expanded.contains(e.id) ? nil : 2)
+                                    .padding(.top, 2)
+                                
+                                Button(expanded.contains(e.id) ? "Show less" : "Show more") {
+                                    if expanded.contains(e.id) { expanded.remove(e.id) } else { expanded.insert(e.id) }
+                                }
+                                .font(.caption)
+                                .buttonStyle(.plain)
+                                .padding(.top, 2)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            if expanded.contains(e.id) { expanded.remove(e.id) } else { expanded.insert(e.id) }
+                        }
+                        .swipeActions {
+                            Button(role: .destructive) {
+                                delete(e)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Saved Workouts")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        entries = WorkoutStore.shared.load().sorted { $0.date > $1.date }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .accessibilityLabel("Refresh")
+                }
+            }
+            .onAppear {
+                entries = WorkoutStore.shared.load().sorted { $0.date > $1.date }
+            }
         }
     }
     
-    // MARK: - Settings
+    private func format(date: Date) -> String {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return f.string(from: date)
+    }
     
-    private struct SettingsSheet: View {
-        @Binding var tmSquat: Double
-        @Binding var tmBench: Double
-        @Binding var tmDeadlift: Double
-        @Binding var tmRow: Double
-        @Binding var barWeight: Double
-        @Binding var roundTo: Double
-        @Binding var bbbPct: Double
-        @Binding var timerRegularSec: Int
-        @Binding var timerBBBsec: Int
-        @Binding var tmProgStyleRaw: String
-        @Binding var autoAdvanceWeek: Bool
-        
-        @State private var tmpSquat = ""
-        @State private var tmpBench = ""
-        @State private var tmpDeadlift = ""
-        @State private var tmpRow = ""
-        @State private var tmpBarWeight = ""
-        @State private var tmpRoundTo = ""
-        @State private var tmpTimerRegular = ""
-        @State private var tmpTimerBBB = ""
-        
-        @Environment(\.dismiss) private var dismiss
-        @FocusState private var focusedField: Field?
-        
-        enum Field {
-            case squat, bench, deadlift, row, barWeight, roundTo, timerRegular, timerBBB
-        }
-        
-        var body: some View {
-            NavigationStack {
-                Form {
-                    Section("Training Maxes (lb)") {
-                        numField("Squat", value: $tmpSquat, field: .squat)
-                        numField("Bench", value: $tmpBench, field: .bench)
-                        numField("Deadlift", value: $tmpDeadlift, field: .deadlift)
-                        numField("Row", value: $tmpRow, field: .row)
-                    }
-                    
-                    Section("Loading") {
-                        numField("Bar Weight (lb)", value: $tmpBarWeight, field: .barWeight)
-                        numField("Round To (lb)", value: $tmpRoundTo, field: .roundTo)
-                    }
-                    
-                    Section("Assistance (BBB)") {
-                        HStack {
-                            Text("BBB % of TM")
-                            Spacer()
-                            Text("\(Int(bbbPct * 100))%")
-                                .foregroundStyle(.secondary)
-                        }
-                        Slider(value: $bbbPct, in: 0.50...0.70, step: 0.05)
-                    }
-                    
-                    Section("Rest Timer (seconds)") {
-                        HStack {
-                            Text("Regular sets")
-                            Spacer()
-                            TextField("240", text: $tmpTimerRegular)
-                                .keyboardType(.numberPad)
-                                .multilineTextAlignment(.trailing)
-                                .frame(width: 80)
-                                .focused($focusedField, equals: .timerRegular)
-                        }
-                        HStack {
-                            Text("BBB / accessory")
-                            Spacer()
-                            TextField("180", text: $tmpTimerBBB)
-                                .keyboardType(.numberPad)
-                                .multilineTextAlignment(.trailing)
-                                .frame(width: 80)
-                                .focused($focusedField, equals: .timerBBB)
-                        }
-                        Text("Tip: 240s = 4:00, 180s = 3:00")
-                            .font(.caption)
+    private func delete(_ entry: WorkoutEntry) {
+        WorkoutStore.shared.delete(id: entry.id)
+        entries.removeAll { $0.id == entry.id }
+    }
+}
+
+// MARK: - Settings Sheet
+
+private struct SettingsSheet: View {
+    @Binding var tmSquat: Double
+    @Binding var tmBench: Double
+    @Binding var tmDeadlift: Double
+    @Binding var tmRow: Double
+    @Binding var barWeight: Double
+    @Binding var roundTo: Double
+    @Binding var bbbPct: Double
+    @Binding var timerRegularSec: Int
+    @Binding var timerBBBsec: Int
+    @Binding var tmProgStyleRaw: String
+    @Binding var autoAdvanceWeek: Bool
+    
+    @State private var tmpSquat = ""
+    @State private var tmpBench = ""
+    @State private var tmpDeadlift = ""
+    @State private var tmpRow = ""
+    @State private var tmpBarWeight = ""
+    @State private var tmpRoundTo = ""
+    @State private var tmpTimerRegular = ""
+    @State private var tmpTimerBBB = ""
+    
+    @Environment(\.dismiss) private var dismiss
+    @FocusState private var focusedField: Field?
+    
+    enum Field {
+        case squat, bench, deadlift, row, barWeight, roundTo, timerRegular, timerBBB
+    }
+    
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Training Maxes (lb)") {
+                    numField("Squat", value: $tmpSquat, field: .squat)
+                    numField("Bench", value: $tmpBench, field: .bench)
+                    numField("Deadlift", value: $tmpDeadlift, field: .deadlift)
+                    numField("Row", value: $tmpRow, field: .row)
+                }
+                
+                Section("Loading") {
+                    numField("Bar Weight (lb)", value: $tmpBarWeight, field: .barWeight)
+                    numField("Round To (lb)", value: $tmpRoundTo, field: .roundTo)
+                }
+                
+                Section("Assistance (BBB)") {
+                    HStack {
+                        Text("BBB % of TM")
+                        Spacer()
+                        Text("\(Int(bbbPct * 100))%")
                             .foregroundStyle(.secondary)
                     }
-                    
-                    Section("TM Progression Style") {
-                        Picker("Style", selection: $tmProgStyleRaw) {
-                            Text("Classic (+5/+10)").tag("classic")
-                            Text("Auto (90% of AMRAP 1RM)").tag("auto")
-                        }
-                        .pickerStyle(.segmented)
-                        Text("Classic = steady +5 upper / +10 lower per cycle.\nAuto = set TM to 90% of latest AMRAP est. 1RM (capped at +10 upper / +20 lower).")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    Slider(value: $bbbPct, in: 0.50...0.70, step: 0.05)
+                }
+                
+                Section("Rest Timer (seconds)") {
+                    HStack {
+                        Text("Regular sets")
+                        Spacer()
+                        TextField("240", text: $tmpTimerRegular)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 80)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .focused($focusedField, equals: .timerRegular)
                     }
-                    
-                    Section("Behavior") {
-                        Toggle("Auto-advance week after finishing workout", isOn: $autoAdvanceWeek)
+                    HStack {
+                        Text("BBB / accessory")
+                        Spacer()
+                        TextField("180", text: $tmpTimerBBB)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 80)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .focused($focusedField, equals: .timerBBB)
                     }
-                    
-                    Section {
-                        Button(role: .destructive) {
-                            tmpSquat = "315"; tmpBench = "225"
-                            tmpDeadlift = "405"; tmpRow = "185"
-                            tmpBarWeight = "45"; tmpRoundTo = "5"
-                        } label: {
-                            Label("Reset to defaults", systemImage: "arrow.counterclockwise")
-                        }
+                    Text("Tip: 240s = 4:00, 180s = 3:00")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                
+                Section("TM Progression Style") {
+                    Picker("Style", selection: $tmProgStyleRaw) {
+                        Text("Classic (+5/+10)").tag("classic")
+                        Text("Auto (90% of AMRAP 1RM)").tag("auto")
+                    }
+                    .pickerStyle(.segmented)
+                    Text("Classic = steady +5 upper / +10 lower per cycle.\nAuto = set TM to 90% of latest AMRAP est. 1RM (capped at +10 upper / +20 lower).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                
+                Section("Behavior") {
+                    Toggle("Auto-advance week after finishing workout", isOn: $autoAdvanceWeek)
+                }
+                
+                Section {
+                    Button(role: .destructive) {
+                        tmpSquat = "315"; tmpBench = "225"
+                        tmpDeadlift = "405"; tmpRow = "185"
+                        tmpBarWeight = "45"; tmpRoundTo = "5"
+                    } label: {
+                        Label("Reset to defaults", systemImage: "arrow.counterclockwise")
                     }
                 }
-                .toolbar {
+            }
+            .toolbar {
+                if focusedField != nil {
                     ToolbarItemGroup(placement: .keyboard) {
                         Spacer()
-                        Button("Done") {
-                            focusedField = nil
-                        }
+                        Button("Done") { focusedField = nil }
                     }
                 }
-                .navigationTitle("Settings")
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("Cancel") { dismiss() }
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("Save") {
-                            if let v = Double(tmpSquat)    { tmSquat = v }
-                            if let v = Double(tmpBench)    { tmBench = v }
-                            if let v = Double(tmpDeadlift) { tmDeadlift = v }
-                            if let v = Double(tmpRow)      { tmRow = v }
-                            if let v = Double(tmpBarWeight){ barWeight = v }
-                            if let v = Double(tmpRoundTo)  { roundTo = v }
-                            if let v = Int(tmpTimerRegular) { timerRegularSec = max(1, v) }
-                            if let v = Int(tmpTimerBBB)     { timerBBBsec     = max(1, v) }
-                            dismiss()
-                        }.bold()
-                    }
+            }
+            .navigationTitle("Settings")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
                 }
-                .onAppear {
-                    tmpSquat = String(format: "%.0f", tmSquat)
-                    tmpBench = String(format: "%.0f", tmBench)
-                    tmpDeadlift = String(format: "%.0f", tmDeadlift)
-                    tmpRow = String(format: "%.0f", tmRow)
-                    tmpBarWeight = String(format: "%.0f", barWeight)
-                    tmpRoundTo = String(format: "%.0f", roundTo)
-                    tmpTimerRegular = String(timerRegularSec)
-                    tmpTimerBBB = String(timerBBBsec)
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Save") {
+                        if let v = Double(tmpSquat)    { tmSquat = v }
+                        if let v = Double(tmpBench)    { tmBench = v }
+                        if let v = Double(tmpDeadlift) { tmDeadlift = v }
+                        if let v = Double(tmpRow)      { tmRow = v }
+                        if let v = Double(tmpBarWeight){ barWeight = max(1,   min(v, 200)) }
+                        if let v = Double(tmpRoundTo)  { roundTo   = max(0.5, min(v, 100)) }
+                        if let v = Int(tmpTimerRegular) { timerRegularSec = max(1, v) }
+                        if let v = Int(tmpTimerBBB)     { timerBBBsec     = max(1, v) }
+                        dismiss()
+                    }.bold()
                 }
+            }
+            .onAppear {
+                tmpSquat = String(format: "%.0f", tmSquat)
+                tmpBench = String(format: "%.0f", tmBench)
+                tmpDeadlift = String(format: "%.0f", tmDeadlift)
+                tmpRow = String(format: "%.0f", tmRow)
+                tmpBarWeight = String(format: "%.0f", barWeight)
+                tmpRoundTo = String(format: "%.0f", roundTo)
+                tmpTimerRegular = String(timerRegularSec)
+                tmpTimerBBB = String(timerBBBsec)
             }
         }
-        
-        @ViewBuilder
-        private func numField(_ label: String, value: Binding<String>, field: Field) -> some View {
-            HStack {
-                Text(label)
-                Spacer()
-                TextField("0", text: value)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-                    .frame(width: 100)
-                    .focused($focusedField, equals: field)
-            }
+    }
+    
+    @ViewBuilder
+    private func numField(_ label: String, value: Binding<String>, field: Field) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            TextField("0", text: value)
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.trailing)
+                .frame(width: 100)
+                .focused($focusedField, equals: field)
         }
     }
 }
