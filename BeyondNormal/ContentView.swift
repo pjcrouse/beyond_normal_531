@@ -70,6 +70,45 @@ final class WorkoutStore {
     }
 }
 
+// MARK: - Weekly Summary Helpers
+
+extension WorkoutStore {
+    /// Returns entries whose date falls within the given DateInterval.
+    func load(in interval: DateInterval) -> [WorkoutEntry] {
+        load().filter { interval.contains($0.date) }
+    }
+}
+
+struct WeeklySummaryResult: Identifiable {
+    let id = UUID()
+    let interval: DateInterval
+    let totalVolume: Int
+    /// (lift, est1RM, date) for each workout with an AMRAP-derived estimate (> 0), newest first.
+    let oneRMs: [(lift: String, est1RM: Int, date: Date)]
+}
+
+func computeWeeklySummary(for interval: DateInterval, entries: [WorkoutEntry]) -> WeeklySummaryResult {
+    let weekEntries = entries.filter { interval.contains($0.date) }
+    let total = weekEntries.reduce(0) { $0 + $1.totalVolume }
+    let oneRMs = weekEntries
+        .filter { $0.est1RM > 0 }
+        .map { (lift: $0.lift, est1RM: Int($0.est1RM.rounded()), date: $0.date) }
+        .sorted { $0.date > $1.date }
+    
+    return WeeklySummaryResult(interval: interval, totalVolume: total, oneRMs: oneRMs)
+}
+
+func currentCalendarWeekInterval() -> DateInterval {
+    let cal = Calendar.current
+    let today = Date()
+    if let interval = cal.dateInterval(of: .weekOfYear, for: today) {
+        return interval
+    }
+    // Fallback: 7-day window starting today
+    let start = cal.startOfDay(for: today)
+    return DateInterval(start: start, end: cal.date(byAdding: .day, value: 7, to: start)!)
+}
+
 // MARK: - Workout State Manager
 
 final class WorkoutStateManager: ObservableObject {
@@ -1577,6 +1616,9 @@ private struct HistorySheet: View {
     @State private var entries: [WorkoutEntry] = []
     @State private var expanded: Set<UUID> = []
     
+    // NEW: Weekly summary presentation state
+    @State private var weeklyResult: WeeklySummaryResult? = nil
+    
     var body: some View {
         NavigationStack {
             List {
@@ -1648,9 +1690,23 @@ private struct HistorySheet: View {
                     }
                     .accessibilityLabel("Refresh")
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        let interval = currentCalendarWeekInterval()
+                        let result = computeWeeklySummary(for: interval, entries: WorkoutStore.shared.load())
+                        weeklyResult = result
+                    } label: {
+                        Image(systemName: "calendar.badge.checkmark")
+                    }
+                    .accessibilityLabel("Weekly Summary")
+                }
             }
             .onAppear {
                 entries = WorkoutStore.shared.load().sorted { $0.date > $1.date }
+            }
+            .sheet(item: $weeklyResult) { r in
+                WeeklySummarySheet(result: r)
+                    .presentationDetents([.medium, .large])
             }
         }
     }
@@ -1665,6 +1721,64 @@ private struct HistorySheet: View {
     private func delete(_ entry: WorkoutEntry) {
         WorkoutStore.shared.delete(id: entry.id)
         entries.removeAll { $0.id == entry.id }
+    }
+}
+
+// MARK: - Weekly Summary Sheet
+
+private struct WeeklySummarySheet: View {
+    let result: WeeklySummaryResult
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section(header: Text("Totals")) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Week:")
+                        Text("\(formatDate(result.interval.start)) – \(formatDate(result.interval.end.addingTimeInterval(-1)))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("Total Volume: \(result.totalVolume.formatted(.number)) lb")
+                            .font(.headline)
+                    }
+                }
+                Section(header: Text("Estimated 1RMs")) {
+                    if result.oneRMs.isEmpty {
+                        Text("No AMRAP sets logged this week.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(result.oneRMs.indices, id: \.self) { i in
+                            let item = result.oneRMs[i]
+                            HStack {
+                                VStack(alignment: .leading) {
+                                    Text(item.lift).font(.headline)
+                                    Text(formatDateTime(item.date))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Text("\(item.est1RM) lb")
+                                    .font(.headline)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Weekly Summary")
+        }
+    }
+
+    private func formatDate(_ d: Date) -> String {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        return f.string(from: d)
+    }
+    private func formatDateTime(_ d: Date) -> String {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return f.string(from: d)
     }
 }
 
