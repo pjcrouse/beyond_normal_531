@@ -3,6 +3,8 @@ import Foundation
 import Combine
 import UserNotifications
 
+// MARK: - Notifications
+
 final class LocalNotifDelegate: NSObject, UNUserNotificationCenterDelegate {
     static let shared = LocalNotifDelegate()
     
@@ -12,6 +14,8 @@ final class LocalNotifDelegate: NSObject, UNUserNotificationCenterDelegate {
         completionHandler([.banner, .sound, .list])
     }
 }
+
+// MARK: - History Storage
 
 struct WorkoutEntry: Codable, Identifiable {
     let id: UUID
@@ -67,6 +71,7 @@ final class WorkoutStore {
 }
 
 // MARK: - Workout State Manager
+
 final class WorkoutStateManager: ObservableObject {
     @Published private(set) var state: [String: String] = [:]
     @Published private(set) var completedLifts: [String: [String]] = [:]
@@ -299,6 +304,7 @@ final class WorkoutStateManager: ObservableObject {
 }
 
 // MARK: - Timer Manager (Isolated from view)
+
 final class TimerManager: ObservableObject {
     @Published var remaining: Int = 0
     @Published var isRunning: Bool = false
@@ -367,6 +373,7 @@ final class TimerManager: ObservableObject {
 }
 
 // MARK: - Plate Calculator (Cached)
+
 final class PlateCalculator {
     private let barWeight: Double
     private let roundTo: Double
@@ -411,7 +418,103 @@ final class PlateCalculator {
     }
 }
 
+// MARK: - Assistance Catalog
+
+enum ExerciseCategory: String, Codable, CaseIterable {
+    case push, pull, legs, core
+}
+
+struct AssistanceExercise: Identifiable, Codable, Hashable {
+    let id: String
+    let name: String
+    let defaultWeight: Double        // 0 = bodyweight
+    let defaultReps: Int
+    let allowWeightToggle: Bool      // e.g. dips, split squats with DBs
+    let toggledWeight: Double        // default DB weight when toggled
+    let usesImpliedImplements: Bool  // cosmetic label (EZ bar, machine)
+    let category: ExerciseCategory
+}
+
+extension AssistanceExercise {
+    static let catalog: [AssistanceExercise] = [
+        // LEGS (squat/deadlift leg drive)
+        .init(id: "split_squat", name: "Heels-Elevated Split Squat",
+              defaultWeight: 0, defaultReps: 12,
+              allowWeightToggle: true, toggledWeight: 30,
+              usesImpliedImplements: false, category: .legs),
+        .init(id: "front_squat", name: "Front Squat",
+              defaultWeight: 95, defaultReps: 8,
+              allowWeightToggle: false, toggledWeight: 0,
+              usesImpliedImplements: false, category: .legs),
+        .init(id: "paused_squat", name: "Paused Squat (2s)",
+              defaultWeight: 95, defaultReps: 5,
+              allowWeightToggle: false, toggledWeight: 0,
+              usesImpliedImplements: false, category: .legs),
+        .init(id: "leg_press", name: "Leg Press",
+              defaultWeight: 180, defaultReps: 12,
+              allowWeightToggle: false, toggledWeight: 0,
+              usesImpliedImplements: true, category: .legs),
+        .init(id: "bulgarian", name: "Bulgarian Split Squat",
+              defaultWeight: 0, defaultReps: 10,
+              allowWeightToggle: true, toggledWeight: 30,
+              usesImpliedImplements: false, category: .legs),
+        .init(id: "lunges", name: "Walking Lunges",
+              defaultWeight: 0, defaultReps: 12,
+              allowWeightToggle: true, toggledWeight: 25,
+              usesImpliedImplements: false, category: .legs),
+        
+        // PUSH (bench)
+        .init(id: "triceps_ext", name: "Lying Triceps Extension (EZ)",
+              defaultWeight: 25, defaultReps: 12,
+              allowWeightToggle: false, toggledWeight: 0,
+              usesImpliedImplements: true, category: .push),
+        .init(id: "dips", name: "Dips",
+              defaultWeight: 0, defaultReps: 10,
+              allowWeightToggle: true, toggledWeight: 25,
+              usesImpliedImplements: false, category: .push),
+        .init(id: "close_grip", name: "Close-Grip Bench",
+              defaultWeight: 95, defaultReps: 8,
+              allowWeightToggle: false, toggledWeight: 0,
+              usesImpliedImplements: false, category: .push),
+        
+        // PULL (row)
+        .init(id: "spider_curls", name: "Spider Curls (DB)",
+              defaultWeight: 30, defaultReps: 12,
+              allowWeightToggle: false, toggledWeight: 0,
+              usesImpliedImplements: false, category: .pull),
+        .init(id: "hammer_curls", name: "Hammer Curls (DB)",
+              defaultWeight: 30, defaultReps: 12,
+              allowWeightToggle: false, toggledWeight: 0,
+              usesImpliedImplements: false, category: .pull),
+        .init(id: "face_pulls", name: "Face Pulls (Cable)",
+              defaultWeight: 25, defaultReps: 15,
+              allowWeightToggle: false, toggledWeight: 0,
+              usesImpliedImplements: true, category: .pull),
+        
+        // CORE (deadlift/back)
+        .init(id: "back_ext", name: "Back Extension",
+              defaultWeight: 0, defaultReps: 12,
+              allowWeightToggle: true, toggledWeight: 25,
+              usesImpliedImplements: false, category: .core),
+        .init(id: "hanging_leg", name: "Hanging Leg Raise",
+              defaultWeight: 0, defaultReps: 10,
+              allowWeightToggle: false, toggledWeight: 0,
+              usesImpliedImplements: false, category: .core),
+        .init(id: "ab_wheel", name: "Ab Wheel Rollout",
+              defaultWeight: 0, defaultReps: 8,
+              allowWeightToggle: false, toggledWeight: 0,
+              usesImpliedImplements: false, category: .core),
+    ]
+    
+    static func byID(_ id: String) -> AssistanceExercise? {
+        catalog.first { $0.id == id }
+    }
+}
+
+// MARK: - Main View
+
 struct ContentView: View {
+    // Training inputs
     @AppStorage("tm_squat")    private var tmSquat: Double = 315
     @AppStorage("tm_bench")    private var tmBench: Double = 225
     @AppStorage("tm_deadlift") private var tmDeadlift: Double = 405
@@ -421,6 +524,7 @@ struct ContentView: View {
     @AppStorage("round_to")    private var roundTo: Double = 5
     @AppStorage("bbb_pct")     private var bbbPct: Double = 0.50
     
+    // Assistance defaults (kept for legacy; current UI uses per-exercise defaults)
     @AppStorage("assist_weight_squat")    private var assistWeightSquat: Double = 0
     @AppStorage("assist_weight_bench")    private var assistWeightBench: Double = 65
     @AppStorage("assist_weight_deadlift") private var assistWeightDeadlift: Double = 0
@@ -432,6 +536,12 @@ struct ContentView: View {
     
     @AppStorage("tm_progression_style") private var tmProgStyleRaw: String = "classic"
     @AppStorage("auto_advance_week")    private var autoAdvanceWeek: Bool = false
+    
+    // NEW: User-selected assistance exercise IDs (backward-compatible defaults)
+    @AppStorage("assist_squat_id")    private var assistSquatID: String = "split_squat"
+    @AppStorage("assist_bench_id")    private var assistBenchID: String = "triceps_ext"
+    @AppStorage("assist_deadlift_id") private var assistDeadliftID: String = "back_ext"
+    @AppStorage("assist_row_id")      private var assistRowID: String = "spider_curls"
     
     @StateObject private var workoutState = WorkoutStateManager()
     @StateObject private var timer = TimerManager()
@@ -479,7 +589,7 @@ struct ContentView: View {
                         
                         resetButton
                         
-                        Text("v0.0.8 • Final Optimization")
+                        Text("v0.0.9 • Assistance Picker")
                             .font(.footnote)
                             .foregroundStyle(.tertiary)
                     }
@@ -523,7 +633,11 @@ struct ContentView: View {
                 timerRegularSec: $timerRegularSec,
                 timerBBBsec: $timerBBBsec,
                 tmProgStyleRaw: $tmProgStyleRaw,
-                autoAdvanceWeek: $autoAdvanceWeek
+                autoAdvanceWeek: $autoAdvanceWeek,
+                assistSquatID: $assistSquatID,
+                assistBenchID: $assistBenchID,
+                assistDeadliftID: $assistDeadliftID,
+                assistRowID: $assistRowID
             )
             .presentationDetents([.medium, .large])
         }
@@ -817,18 +931,18 @@ struct ContentView: View {
     
     private var assistanceView: some View {
         let scheme = weekScheme(currentWeek)
-        let a = assistanceFor(selectedLift)
+        let ex = assistanceExerciseFor(selectedLift)
         
         return Group {
             if scheme.showBBB {
                 Divider().padding(.vertical, 6)
                 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Assistance — \(a.title)")
+                    Text("Assistance — \(ex.name)")
                         .font(.headline)
                     
                     // Add toggle ONLY if allowWeightToggle is true
-                    if a.allowWeightToggle {
+                    if ex.allowWeightToggle {
                         Toggle(isOn: Binding(
                             get: { workoutState.getAssistUseWeight(lift: selectedLift.rawValue, week: currentWeek) },
                             set: { workoutState.setAssistUseWeight(lift: selectedLift.rawValue, week: currentWeek, useWeight: $0) }
@@ -840,15 +954,15 @@ struct ContentView: View {
                     }
                 }
                 
-                // Determine if weight is used: either defaultBarWeight > 0 OR toggle is on
-                let useWeight = a.defaultBarWeight > 0 || (a.allowWeightToggle && workoutState.getAssistUseWeight(lift: selectedLift.rawValue, week: currentWeek))
-                let defaultWeight = a.defaultBarWeight > 0 ? a.defaultBarWeight : (a.allowWeightToggle && workoutState.getAssistUseWeight(lift: selectedLift.rawValue, week: currentWeek) ? a.toggledWeight : 0)
+                // Determine if weight is used: either defaultWeight > 0 OR toggle is on
+                let useWeight = ex.defaultWeight > 0 || (ex.allowWeightToggle && workoutState.getAssistUseWeight(lift: selectedLift.rawValue, week: currentWeek))
+                let defaultWeight = ex.defaultWeight > 0 ? ex.defaultWeight : (ex.allowWeightToggle && workoutState.getAssistUseWeight(lift: selectedLift.rawValue, week: currentWeek) ? ex.toggledWeight : 0)
                 
                 ForEach(1...3, id: \.self) { setNum in
                     AssistSetRow(
                         setNumber: setNum,
                         defaultWeight: defaultWeight,
-                        defaultReps: a.defaultReps,
+                        defaultReps: ex.defaultReps,
                         hasBarWeight: useWeight,
                         done: assistSetBinding(setNum),
                         currentWeight: Binding(
@@ -862,9 +976,9 @@ struct ContentView: View {
                             }
                         ),
                         currentReps: Binding(
-                            get: { workoutState.getAssistReps(lift: selectedLift.rawValue, week: currentWeek, set: setNum) ?? a.defaultReps },
+                            get: { workoutState.getAssistReps(lift: selectedLift.rawValue, week: currentWeek, set: setNum) ?? ex.defaultReps },
                             set: { newVal in
-                                if newVal == a.defaultReps {
+                                if newVal == ex.defaultReps {
                                     workoutState.setAssistReps(lift: selectedLift.rawValue, week: currentWeek, set: setNum, reps: nil)
                                 } else {
                                     workoutState.setAssistReps(lift: selectedLift.rawValue, week: currentWeek, set: setNum, reps: newVal)
@@ -947,16 +1061,6 @@ struct ContentView: View {
         }
     }
     
-    private struct AssistanceDef {
-        let title: String
-        let defaultBarWeight: Double
-        let defaultSets: Int
-        let defaultReps: Int
-        let useEZBar: Bool
-        let allowWeightToggle: Bool  // New: allows switching bodyweight/weighted
-        let toggledWeight: Double     // Default weight when toggled on
-    }
-    
     private struct SetScheme { let pct: Double; let reps: Int; let amrap: Bool }
     
     private struct WeekSchemeResult {
@@ -967,13 +1071,15 @@ struct ContentView: View {
     
     // MARK: - Helpers
     
-    private func assistanceFor(_ lift: Lift) -> AssistanceDef {
+    private func assistanceExerciseFor(_ lift: Lift) -> AssistanceExercise {
+        let id: String
         switch lift {
-        case .squat:    return .init(title: "Heels Elevated Split Squat", defaultBarWeight: 0, defaultSets: 3, defaultReps: 12, useEZBar: false, allowWeightToggle: true, toggledWeight: 30)
-        case .bench:    return .init(title: "Lying Triceps Extension (EZ bar 25 lb)", defaultBarWeight: 25, defaultSets: 3, defaultReps: 12, useEZBar: true, allowWeightToggle: false, toggledWeight: 0)
-        case .deadlift: return .init(title: "Back Extension", defaultBarWeight: 0, defaultSets: 3, defaultReps: 12, useEZBar: false, allowWeightToggle: false, toggledWeight: 0)
-        case .row:      return .init(title: "Spider Curls (DBs)", defaultBarWeight: 30, defaultSets: 3, defaultReps: 12, useEZBar: false, allowWeightToggle: false, toggledWeight: 0)
+        case .squat:    id = assistSquatID
+        case .bench:    id = assistBenchID
+        case .deadlift: id = assistDeadliftID
+        case .row:      id = assistRowID
         }
+        return AssistanceExercise.byID(id) ?? AssistanceExercise.catalog.first!
     }
     
     private func tmFor(_ lift: Lift) -> Double {
@@ -1023,7 +1129,7 @@ struct ContentView: View {
     }
     
     private func setBinding(_ num: Int) -> Binding<Bool> {
-        return Binding(
+        Binding(
             get: { self.workoutState.getSetComplete(lift: self.selectedLift.rawValue, week: self.currentWeek, set: num) },
             set: { newValue in
                 self.workoutState.setSetComplete(lift: self.selectedLift.rawValue, week: self.currentWeek, set: num, value: newValue)
@@ -1032,7 +1138,7 @@ struct ContentView: View {
     }
     
     private func assistSetBinding(_ n: Int) -> Binding<Bool> {
-        return Binding(
+        Binding(
             get: { self.workoutState.getAssistComplete(lift: self.selectedLift.rawValue, week: self.currentWeek, set: n) },
             set: { newValue in
                 self.workoutState.setAssistComplete(lift: self.selectedLift.rawValue, week: self.currentWeek, set: n, value: newValue)
@@ -1040,20 +1146,12 @@ struct ContentView: View {
         )
     }
     
-    private func assistWeightBinding(for lift: Lift) -> Binding<Double> {
-        switch lift {
-        case .squat:    return $assistWeightSquat
-        case .bench:    return $assistWeightBench
-        case .deadlift: return $assistWeightDeadlift
-        case .row:      return $assistWeightRow
-        }
-    }
-    
     private func resetCurrentLift() {
         workoutState.resetLift(lift: selectedLift.rawValue, week: currentWeek)
         workoutNotes = ""
         liveRepsText = ""
         
+        // Keep legacy per-lift default assistance weight baselines
         switch selectedLift {
         case .squat:    assistWeightSquat = 0
         case .bench:    assistWeightBench = 65
@@ -1105,14 +1203,13 @@ struct ContentView: View {
         }
         
         // Assistance volume
-        let assistDef = assistanceFor(selectedLift)
-        let useWeight = assistDef.defaultBarWeight > 0 || (assistDef.allowWeightToggle && workoutState.getAssistUseWeight(lift: selectedLift.rawValue, week: currentWeek))
-        let defaultAssistW = assistDef.defaultBarWeight > 0 ? assistDef.defaultBarWeight : (assistDef.allowWeightToggle && workoutState.getAssistUseWeight(lift: selectedLift.rawValue, week: currentWeek) ? assistDef.toggledWeight : 0)
+        let ex = assistanceExerciseFor(selectedLift)
+        let defaultAssistW = ex.defaultWeight > 0 ? ex.defaultWeight : (ex.allowWeightToggle && workoutState.getAssistUseWeight(lift: selectedLift.rawValue, week: currentWeek) ? ex.toggledWeight : 0)
         var assistVol = 0.0
         for setNum in 1...3 {
             if scheme.showBBB && workoutState.getAssistComplete(lift: selectedLift.rawValue, week: currentWeek, set: setNum) {
                 let weight = workoutState.getAssistWeight(lift: selectedLift.rawValue, week: currentWeek, set: setNum) ?? defaultAssistW
-                let reps = workoutState.getAssistReps(lift: selectedLift.rawValue, week: currentWeek, set: setNum) ?? assistDef.defaultReps
+                let reps = workoutState.getAssistReps(lift: selectedLift.rawValue, week: currentWeek, set: setNum) ?? ex.defaultReps
                 assistVol += weight * Double(reps)
             }
         }
@@ -1266,21 +1363,18 @@ struct ContentView: View {
                             currentWeight = max(0, currentWeight - roundTo)
                         } label: {
                             Image(systemName: "minus.circle.fill")
-                                .foregroundStyle(.red)
                         }
                         Text("\(Int(currentWeight))").font(.caption).monospacedDigit()
                         Button {
                             currentWeight += roundTo
                         } label: {
                             Image(systemName: "plus.circle.fill")
-                                .foregroundStyle(.green)
                         }
                         if abs(currentWeight - defaultWeight) > 0.1 {
                             Button {
                                 currentWeight = defaultWeight
                             } label: {
                                 Image(systemName: "arrow.counterclockwise.circle.fill")
-                                    .foregroundStyle(.blue)
                             }
                         }
                     }
@@ -1294,21 +1388,18 @@ struct ContentView: View {
                             currentReps = max(1, currentReps - 1)
                         } label: {
                             Image(systemName: "minus.circle.fill")
-                                .foregroundStyle(.red)
                         }
                         Text("\(currentReps)").font(.caption).monospacedDigit()
                         Button {
                             currentReps += 1
                         } label: {
                             Image(systemName: "plus.circle.fill")
-                                .foregroundStyle(.green)
                         }
                         if currentReps != defaultReps {
                             Button {
                                 currentReps = defaultReps
                             } label: {
                                 Image(systemName: "arrow.counterclockwise.circle.fill")
-                                    .foregroundStyle(.blue)
                             }
                         }
                     }
@@ -1364,21 +1455,18 @@ struct ContentView: View {
                                 currentWeight = max(0, currentWeight - roundTo)
                             } label: {
                                 Image(systemName: "minus.circle.fill")
-                                    .foregroundStyle(.red)
                             }
                             Text("\(Int(currentWeight))").font(.caption).monospacedDigit()
                             Button {
                                 currentWeight += roundTo
                             } label: {
                                 Image(systemName: "plus.circle.fill")
-                                    .foregroundStyle(.green)
                             }
                             if abs(currentWeight - defaultWeight) > 0.1 {
                                 Button {
                                     currentWeight = defaultWeight
                                 } label: {
                                     Image(systemName: "arrow.counterclockwise.circle.fill")
-                                        .foregroundStyle(.blue)
                                 }
                             }
                         }
@@ -1393,21 +1481,18 @@ struct ContentView: View {
                             currentReps = max(1, currentReps - 1)
                         } label: {
                             Image(systemName: "minus.circle.fill")
-                                .foregroundStyle(.red)
                         }
                         Text("\(currentReps)").font(.caption).monospacedDigit()
                         Button {
                             currentReps += 1
                         } label: {
                             Image(systemName: "plus.circle.fill")
-                                .foregroundStyle(.green)
                         }
                         if currentReps != defaultReps {
                             Button {
                                 currentReps = defaultReps
                             } label: {
                                 Image(systemName: "arrow.counterclockwise.circle.fill")
-                                    .foregroundStyle(.blue)
                             }
                         }
                     }
@@ -1419,11 +1504,6 @@ struct ContentView: View {
                 .buttonStyle(.plain)
             }
             .padding(.vertical, 4)
-        }
-        
-        private func plateList(_ ps: [Double]) -> String {
-            ps.map { $0.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int($0))" : String(format: "%.1f", $0) }
-                .joined(separator: ", ")
         }
     }
     
@@ -1588,6 +1668,52 @@ private struct HistorySheet: View {
     }
 }
 
+// MARK: - Exercise Picker
+
+private struct ExercisePickerView: View {
+    let title: String
+    @Binding var selectedID: String
+    let allowedCategories: [ExerciseCategory]
+    
+    @State private var query: String = ""
+    
+    private var filtered: [AssistanceExercise] {
+        AssistanceExercise.catalog
+            .filter { allowedCategories.contains($0.category) }
+            .filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) }
+            .sorted { $0.name < $1.name }
+    }
+    
+    var body: some View {
+        List {
+            if filtered.isEmpty {
+                ContentUnavailableView("No matches",
+                                       systemImage: "magnifyingglass",
+                                       description: Text("Try a different search term."))
+            } else {
+                ForEach(filtered) { ex in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(ex.name).font(.body)
+                            Text(ex.category.rawValue.capitalized)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if selectedID == ex.id {
+                            Image(systemName: "checkmark.circle.fill")
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { selectedID = ex.id }
+                }
+            }
+        }
+        .navigationTitle(title)
+        .searchable(text: $query, placement: .navigationBarDrawer)
+    }
+}
+
 // MARK: - Settings Sheet
 
 private struct SettingsSheet: View {
@@ -1602,6 +1728,12 @@ private struct SettingsSheet: View {
     @Binding var timerBBBsec: Int
     @Binding var tmProgStyleRaw: String
     @Binding var autoAdvanceWeek: Bool
+    
+    // NEW: Assistance exercise selections
+    @Binding var assistSquatID: String
+    @Binding var assistBenchID: String
+    @Binding var assistDeadliftID: String
+    @Binding var assistRowID: String
     
     @State private var tmpSquat = ""
     @State private var tmpBench = ""
@@ -1681,6 +1813,47 @@ private struct SettingsSheet: View {
                     Text("Classic = steady +5 upper / +10 lower per cycle.\nAuto = set TM to 90% of latest AMRAP est. 1RM (capped at +10 upper / +20 lower).")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+                
+                Section("Assistance Exercises") {
+                    NavigationLink("Squat Day") {
+                        ExercisePickerView(
+                            title: "Choose Squat Assistance",
+                            selectedID: $assistSquatID,
+                            allowedCategories: [.legs]
+                        )
+                    }
+                    NavigationLink("Bench Day") {
+                        ExercisePickerView(
+                            title: "Choose Bench Assistance",
+                            selectedID: $assistBenchID,
+                            allowedCategories: [.push]
+                        )
+                    }
+                    NavigationLink("Deadlift Day") {
+                        ExercisePickerView(
+                            title: "Choose Deadlift Assistance",
+                            selectedID: $assistDeadliftID,
+                            allowedCategories: [.legs, .core]
+                        )
+                    }
+                    NavigationLink("Row Day") {
+                        ExercisePickerView(
+                            title: "Choose Row Assistance",
+                            selectedID: $assistRowID,
+                            allowedCategories: [.pull]
+                        )
+                    }
+                    
+                    Button {
+                        // Restore recommended defaults
+                        assistSquatID = "split_squat"
+                        assistBenchID = "triceps_ext"
+                        assistDeadliftID = "back_ext"
+                        assistRowID = "spider_curls"
+                    } label: {
+                        Label("Restore Recommended", systemImage: "arrow.counterclockwise")
+                    }
                 }
                 
                 Section("Behavior") {
