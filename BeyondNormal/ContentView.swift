@@ -560,6 +560,7 @@ struct ContentView: View {
     @AppStorage("tm_row")      private var tmRow: Double = 185
     
     @AppStorage("bar_weight")  private var barWeight: Double = 45
+    @AppStorage("bar_weight_squat")  private var barWeightSquat: Double = 75
     @AppStorage("round_to")    private var roundTo: Double = 5
     @AppStorage("bbb_pct")     private var bbbPct: Double = 0.50
     
@@ -600,7 +601,11 @@ struct ContentView: View {
     @FocusState private var notesFocused: Bool
     
     private var calculator: PlateCalculator {
-        PlateCalculator(barWeight: barWeight, roundTo: roundTo, inventory: [45, 35, 25, 10, 5, 2.5])
+        PlateCalculator(barWeight: barWeightForSelectedLift, roundTo: roundTo, inventory: [45, 35, 25, 10, 5, 2.5])
+    }
+    
+    private var barWeightForSelectedLift: Double {
+        selectedLift == .squat ? barWeightSquat : barWeight
     }
     
     var body: some View {
@@ -676,7 +681,8 @@ struct ContentView: View {
                 assistSquatID: $assistSquatID,
                 assistBenchID: $assistBenchID,
                 assistDeadliftID: $assistDeadliftID,
-                assistRowID: $assistRowID
+                assistRowID: $assistRowID,
+                barWeightSquat: $barWeightSquat
             )
             .presentationDetents([.medium, .large])
         }
@@ -1849,6 +1855,9 @@ private struct SettingsSheet: View {
     @Binding var assistDeadliftID: String
     @Binding var assistRowID: String
     
+    // NEW: per-lift bar weight for Squat (SSB)
+    @Binding var barWeightSquat: Double
+    
     @State private var tmpSquat = ""
     @State private var tmpBench = ""
     @State private var tmpDeadlift = ""
@@ -1857,6 +1866,7 @@ private struct SettingsSheet: View {
     @State private var tmpRoundTo = ""
     @State private var tmpTimerRegular = ""
     @State private var tmpTimerBBB = ""
+    @State private var tmpBarWeightSquat = ""
     
     @Environment(\.dismiss) private var dismiss
     @FocusState private var focusedField: Field?
@@ -1878,6 +1888,19 @@ private struct SettingsSheet: View {
                 Section("Loading") {
                     numField("Bar Weight (lb)", value: $tmpBarWeight, field: .barWeight)
                     numField("Round To (lb)", value: $tmpRoundTo, field: .roundTo)
+                    // NEW: per-lift bar for Squat (SSB)
+                    HStack {
+                        Text("Squat Bar Weight (SSB)")
+                        Spacer()
+                        TextField("75", text: $tmpBarWeightSquat)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 100)
+                            .focused($focusedField, equals: .barWeight) // reuse focus group is fine
+                    }
+                    Text("Tip: Set your SSB’s true weight so plate math shows correct per-side plates on Squat.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 
                 Section("Assistance (BBB)") {
@@ -1979,6 +2002,7 @@ private struct SettingsSheet: View {
                         tmpSquat = "315"; tmpBench = "225"
                         tmpDeadlift = "405"; tmpRow = "185"
                         tmpBarWeight = "45"; tmpRoundTo = "5"
+                        tmpBarWeightSquat = "75" 
                     } label: {
                         Label("Reset to defaults", systemImage: "arrow.counterclockwise")
                     }
@@ -2004,6 +2028,7 @@ private struct SettingsSheet: View {
                         if let v = Double(tmpDeadlift) { tmDeadlift = v }
                         if let v = Double(tmpRow)      { tmRow = v }
                         if let v = Double(tmpBarWeight){ barWeight = max(1,   min(v, 200)) }
+                        if let v = Double(tmpBarWeightSquat)  { barWeightSquat = max(1, min(v, 200)) }
                         if let v = Double(tmpRoundTo)  { roundTo   = max(0.5, min(v, 100)) }
                         if let v = Int(tmpTimerRegular) { timerRegularSec = max(1, v) }
                         if let v = Int(tmpTimerBBB)     { timerBBBsec     = max(1, v) }
@@ -2017,6 +2042,7 @@ private struct SettingsSheet: View {
                 tmpDeadlift = String(format: "%.0f", tmDeadlift)
                 tmpRow = String(format: "%.0f", tmRow)
                 tmpBarWeight = String(format: "%.0f", barWeight)
+                tmpBarWeightSquat = String(format: "%.0f", barWeightSquat)   // NEW
                 tmpRoundTo = String(format: "%.0f", roundTo)
                 tmpTimerRegular = String(timerRegularSec)
                 tmpTimerBBB = String(timerBBBsec)
