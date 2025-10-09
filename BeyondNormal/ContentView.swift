@@ -621,6 +621,221 @@ extension AssistanceExercise {
     }
 }
 
+// MARK: - Warmup Planning
+
+private struct WarmupStep: Identifiable {
+    let id = UUID()
+    let weight: Double
+    let reps: Int
+}
+
+private func suggestedMovement(for lift: ContentView.Lift) -> String {
+    switch lift {
+    case .squat:    return "5 min easy bodyweight squats / hip hinges"
+    case .deadlift: return "5 min kettlebell swings / RDL pattern"
+    case .bench:    return "5 min pushups / banded push-aparts"
+    case .row:      return "5 min band rows / scap retractions"
+    }
+}
+
+/// Builds a ramp from bar → first working set (exclusive). Always starts with bar.
+/// The steps auto-thin if the target is light, and de-dupe after rounding.
+private func buildWarmupPlan(target: Double,
+                             bar: Double,
+                             roundTo: Double) -> [WarmupStep] {
+    guard target.isFinite, bar.isFinite, target > bar else {
+        // Just recommend bar if target is at or under bar
+        return [WarmupStep(weight: bar, reps: 10)]
+    }
+
+    // Base ramp (percent of target) with default reps
+    // Common strength ramp: ~40/55/70/80/90 → work
+    // We'll trim based on how close target is to bar after rounding.
+    let base: [(pct: Double, reps: Int)] = [
+        (0.40, 8), (0.55, 5), (0.70, 3), (0.80, 2), (0.90, 1)
+    ]
+
+    // Local round helper
+    func r(_ x: Double) -> Double {
+        let inc = max(0.5, roundTo)
+        return (x / inc).rounded() * inc
+    }
+
+    var steps: [WarmupStep] = []
+    steps.append(.init(weight: r(bar), reps: 10)) // always bar first
+
+    // Compute candidate weights (exclusive of target)
+    var candidates = base
+        .map { r(target * $0.pct) }
+        .filter { $0 > bar && $0 < target }
+
+    // If target is light, thin the list
+    let span = target - bar
+    if span <= 60 {
+        // keep about two touch points under light target
+        candidates = Array(Set(candidates)).sorted()
+        if candidates.count > 2 {
+            candidates = [candidates.first!, candidates.last!]
+        }
+    } else if span <= 100 {
+        // keep 3–4 touch points
+        candidates = Array(Set(candidates)).sorted()
+        if candidates.count > 4 {
+            candidates = [candidates[0], candidates[1], candidates[candidates.count - 2], candidates.last!]
+        }
+    } else {
+        // heavy target — keep most points but still de-dup
+        candidates = Array(Set(candidates)).sorted()
+    }
+
+    // Map candidates back to reps heuristics (higher weight → fewer reps)
+    for w in candidates {
+        let pct = w / target
+        let reps: Int
+        switch pct {
+        case ..<0.50: reps = 8
+        case ..<0.70: reps = 5
+        case ..<0.82: reps = 3
+        case ..<0.92: reps = 2
+        default:      reps = 1
+        }
+        // Avoid duplicate weights with bar or prior entries
+        if steps.last?.weight != w {
+            steps.append(.init(weight: w, reps: reps))
+        }
+    }
+
+    // Final sanity: ensure strictly increasing, drop any equals to target
+    steps = steps
+        .sorted { $0.weight < $1.weight }
+        .filter { $0.weight < target }
+
+    // If dedup trimmed too much (edge cases), ensure at least bar + one mid step
+    if steps.count == 1, target - bar >= 20 {
+        let mid = r((target + bar) / 2.0)
+        if mid > bar, mid < target {
+            steps.insert(.init(weight: mid, reps: 3), at: 1)
+        }
+    }
+
+    return steps
+}
+
+// MARK: - Warmup Guide Screen
+
+private struct WarmupGuideView: View {
+    let lift: ContentView.Lift
+    let targetWeight: Double     // first main working-set weight for today
+    let barWeight: Double
+    let roundTo: Double
+    let calculator: PlateCalculator
+
+    var body: some View {
+        List {
+            Section("Start Here") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(suggestedMovement(for: lift))
+                        .font(.body)
+                    Text("Keep it truly easy—just enough to raise heart rate and loosen the pattern.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
+
+            Section {
+                headerRow
+                ForEach(warmupSteps) { step in
+                    WarmupSetRow(
+                        weight: step.weight,
+                        reps: step.reps,
+                        perSide: perSide(for: step.weight)
+                    )
+                }
+                targetPreviewRow
+            } header: {
+                Text("Ramped Warmup to First Set")
+            } footer: {
+                Text("Finish the last single with crisp speed. Rest ~2–3 minutes and begin your first set.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("Warmup — \(lift.label)")
+    }
+
+    private var warmupSteps: [WarmupStep] {
+        buildWarmupPlan(target: targetWeight, bar: barWeight, roundTo: roundTo)
+    }
+
+    private func perSide(for total: Double) -> [Double] {
+        // Plate list for the main barbell lifts; row uses a bar too in your app
+        calculator.plates(target: total, barWeight: barWeight)
+    }
+
+    @ViewBuilder
+    private var headerRow: some View {
+        HStack {
+            Text("Today’s first set:")
+            Spacer()
+            Text("\(Int(targetWeight)) lb")
+                .font(.headline)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var targetPreviewRow: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text("Then begin:")
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(Int(targetWeight)) lb × first set")
+                    .font(.headline)
+                let ps = perSide(for: targetWeight)
+                if !ps.isEmpty {
+                    Text("Per side: " + plateList(ps))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func plateList(_ ps: [Double]) -> String {
+        ps.map { $0.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int($0))" : String(format: "%.1f", $0) }
+          .joined(separator: ", ")
+    }
+}
+
+private struct WarmupSetRow: View {
+    let weight: Double
+    let reps: Int
+    let perSide: [Double]
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text("\(reps) reps")
+            Spacer(minLength: 12)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(Int(weight)) lb").font(.headline)
+                if !perSide.isEmpty {
+                    Text("Per side: " + plateList(perSide))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func plateList(_ ps: [Double]) -> String {
+        ps.map { $0.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int($0))" : String(format: "%.1f", $0) }
+          .joined(separator: ", ")
+    }
+}
+
 // MARK: - Main View
 
 struct ContentView: View {
@@ -866,6 +1081,22 @@ struct ContentView: View {
                 ForEach(Lift.allCases) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented)
+            
+            // >>> Warmup Guidance button (always visible, including deload week)
+            let firstSet = calculator.round(tm * scheme.main[0].pct)
+            NavigationLink {
+                WarmupGuideView(
+                    lift: selectedLift,
+                    targetWeight: firstSet,
+                    barWeight: barWeightForSelectedLift,
+                    roundTo: roundTo,
+                    calculator: calculator
+                )
+            } label: {
+                Label("Warmup Guidance", systemImage: "flame")
+                    .font(.headline)
+            }
+            .buttonStyle(.borderedProminent)
             
             mainSetsView(tm: tm, scheme: scheme)
             notesView
