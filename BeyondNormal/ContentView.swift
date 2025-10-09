@@ -669,23 +669,55 @@ private func buildWarmupPlan(target: Double,
         .map { r(target * $0.pct) }
         .filter { $0 > bar && $0 < target }
 
-    // If target is light, thin the list
+    // If target is light/moderate, thin the list
     let span = target - bar
-    if span <= 60 {
-        // keep about two touch points under light target
-        candidates = Array(Set(candidates)).sorted()
-        if candidates.count > 2 {
-            candidates = [candidates.first!, candidates.last!]
+    candidates = Array(Set(candidates)).sorted()
+
+    switch span {
+    case ...85:
+        // Deterministic 2-touch ladder: bar -> mid -> high -> work
+        let r = { (x: Double) -> Double in
+            let inc = max(0.5, roundTo)
+            return (x / inc).rounded() * inc
         }
-    } else if span <= 100 {
-        // keep 3–4 touch points
-        candidates = Array(Set(candidates)).sorted()
-        if candidates.count > 4 {
-            candidates = [candidates[0], candidates[1], candidates[candidates.count - 2], candidates.last!]
+
+        // keep the "high" touch at ~90% but strictly below target
+        var high = r(target * 0.90)
+        if high >= target { high = r(target - roundTo) }
+
+        // small safety so high isn't effectively "bar"
+        if high <= bar { high = r(bar + 20) }
+
+        // halfway point between bar and high
+        var mid = r((bar + high) / 2.0)
+
+        // ensure ordering & bounds
+        var twoTouch = [mid, high]
+            .filter { $0 > bar && $0 < target }
+
+        // de-dup & sort
+        twoTouch = Array(Set(twoTouch)).sorted()
+
+        // if rounding collapsed mid==high, nudge mid down one increment
+        if twoTouch.count == 1, twoTouch.first == high {
+            let inc = max(0.5, roundTo)
+            let nudged = r(high - inc)
+            if nudged > bar { twoTouch = [nudged, high] }
         }
-    } else {
-        // heavy target — keep most points but still de-dup
-        candidates = Array(Set(candidates)).sorted()
+
+        candidates = twoTouch
+
+    case 86...110:
+        // Keep low / mid / high (≈55%, ≈75–80%, ≈90%)
+        if candidates.count >= 3 {
+            let low  = candidates.first!
+            let mid  = candidates[candidates.count / 2]
+            let high = candidates.last!
+            candidates = [low, mid, high]
+        }
+    default:
+        // heavy → keep fuller ladder (already unique/sorted)
+        break
     }
 
     // Map candidates back to reps heuristics (higher weight → fewer reps)
