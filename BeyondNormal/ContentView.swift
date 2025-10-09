@@ -457,6 +457,77 @@ final class PlateCalculator {
     }
 }
 
+// MARK: - Implement Weights (per-exercise)
+
+final class ImplementWeights: ObservableObject {
+    static let shared = ImplementWeights()
+    private init() { load() }
+
+    // Single JSON blob in @AppStorage
+    @AppStorage("implement_weights_json") private var raw: String = ""
+
+    // In-memory map: exerciseID -> implement (bar) weight in lb
+    @Published private(set) var map: [String: Double] = [:]
+
+    // Defaults (tweak as needed). Keys:
+    // - Main lifts use Lift.rawValue ("SQ","BP","DL","RW")
+    // - Assistance uses AssistanceExercise.id
+    private let defaults: [String: Double] = [
+        // Main lifts
+        "SQ": 75,   // SSB for squat day
+        "BP": 45,
+        "DL": 45,
+        "RW": 45,
+
+        // Barbell/EZ assistance examples
+        "front_squat": 45,
+        "paused_squat": 45,
+        "close_grip": 45,
+        "triceps_ext": 25 // typical EZ-bar
+    ]
+
+    func load() {
+        guard let data = raw.data(using: .utf8), !raw.isEmpty,
+              let decoded = try? JSONDecoder().decode([String: Double].self, from: data) else {
+            map = defaults
+            persist()
+            return
+        }
+        // Merge: keep new defaults if added in future
+        var merged = defaults
+        decoded.forEach { merged[$0] = $1 }
+        map = merged
+        persist()
+    }
+
+    private func persist() {
+        if let data = try? JSONEncoder().encode(map),
+           let json = String(data: data, encoding: .utf8) {
+            raw = json
+        }
+    }
+
+    func weight(for exerciseID: String) -> Double {
+        map[exerciseID] ?? defaults[exerciseID] ?? 45
+    }
+
+    func weight(for lift: ContentView.Lift) -> Double {
+        weight(for: lift.rawValue)
+    }
+
+    func setWeight(_ w: Double, for exerciseID: String) {
+        map[exerciseID] = max(1, min(w, 200))
+        persist()
+        objectWillChange.send()
+    }
+
+    func restoreDefaults() {
+        map = defaults
+        persist()
+        objectWillChange.send()
+    }
+}
+
 // MARK: - Assistance Catalog
 
 enum ExerciseCategory: String, Codable, CaseIterable {
@@ -559,7 +630,7 @@ struct ContentView: View {
     @AppStorage("tm_deadlift") private var tmDeadlift: Double = 405
     @AppStorage("tm_row")      private var tmRow: Double = 185
     
-    @AppStorage("bar_weight")  private var barWeight: Double = 45
+    @AppStorage("bar_weight")  private var barWeight: Double = 45   // global fallback (not used for plate math when per-exercise is present)
     @AppStorage("round_to")    private var roundTo: Double = 5
     @AppStorage("bbb_pct")     private var bbbPct: Double = 0.50
     
@@ -584,6 +655,7 @@ struct ContentView: View {
     
     @StateObject private var workoutState = WorkoutStateManager()
     @StateObject private var timer = TimerManager()
+    @StateObject private var implements = ImplementWeights.shared
     
     @State private var workoutNotes: String = ""
     @State private var debouncedNotes: String = ""
@@ -600,7 +672,12 @@ struct ContentView: View {
     @FocusState private var notesFocused: Bool
     
     private var calculator: PlateCalculator {
-        PlateCalculator(barWeight: barWeight, roundTo: roundTo, inventory: [45, 35, 25, 10, 5, 2.5])
+        PlateCalculator(barWeight: barWeightForSelectedLift, roundTo: roundTo, inventory: [45, 35, 25, 10, 5, 2.5])
+    }
+    
+    private var barWeightForSelectedLift: Double {
+        // Per-exercise implement; falls back to defaults in ImplementWeights
+        implements.weight(for: selectedLift)
     }
     
     var body: some View {
@@ -628,7 +705,7 @@ struct ContentView: View {
                         
                         resetButton
                         
-                        Text("v0.0.9 • Assistance Picker")
+                        Text("v0.1.0 • Implements Editor")
                             .font(.footnote)
                             .foregroundStyle(.tertiary)
                     }
@@ -972,6 +1049,11 @@ struct ContentView: View {
         let scheme = weekScheme(currentWeek)
         let ex = assistanceExerciseFor(selectedLift)
         
+        // Decide if this assistance uses a barbell implement (to show plates)
+        let barAssistanceIDs: Set<String> = ["front_squat", "paused_squat", "close_grip"]
+        let usesBarbell = barAssistanceIDs.contains(ex.id)
+        let implementW = implements.weight(for: ex.id)
+        
         return Group {
             if scheme.showBBB {
                 Divider().padding(.vertical, 6)
@@ -998,11 +1080,14 @@ struct ContentView: View {
                 let defaultWeight = ex.defaultWeight > 0 ? ex.defaultWeight : (ex.allowWeightToggle && workoutState.getAssistUseWeight(lift: selectedLift.rawValue, week: currentWeek) ? ex.toggledWeight : 0)
                 
                 ForEach(1...3, id: \.self) { setNum in
+                    // current set weight value
+                    let currentW = workoutState.getAssistWeight(lift: selectedLift.rawValue, week: currentWeek, set: setNum) ?? defaultWeight
                     AssistSetRow(
                         setNumber: setNum,
                         defaultWeight: defaultWeight,
                         defaultReps: ex.defaultReps,
                         hasBarWeight: useWeight,
+                        usesBarbell: usesBarbell,
                         done: assistSetBinding(setNum),
                         currentWeight: Binding(
                             get: { workoutState.getAssistWeight(lift: selectedLift.rawValue, week: currentWeek, set: setNum) ?? defaultWeight },
@@ -1024,7 +1109,9 @@ struct ContentView: View {
                                 }
                             }
                         ),
-                        perSide: [],
+                        perSide: (usesBarbell && useWeight)
+                            ? calculator.plates(target: currentW, barWeight: implementW)
+                            : [],
                         roundTo: roundTo,
                         onCheck: { checked in
                             if checked { timer.start(seconds: timerBBBsec) }
@@ -1087,7 +1174,7 @@ struct ContentView: View {
     
     // MARK: - Types
     
-    private enum Lift: String, CaseIterable, Identifiable {
+    enum Lift: String, CaseIterable, Identifiable {
         case squat = "SQ", bench = "BP", deadlift = "DL", row = "RW"
         var id: String { rawValue }
         var label: String {
@@ -1459,6 +1546,7 @@ struct ContentView: View {
         let defaultWeight: Double
         let defaultReps: Int
         let hasBarWeight: Bool
+        let usesBarbell: Bool
         @Binding var done: Bool
         @Binding var currentWeight: Double
         @Binding var currentReps: Int
@@ -1475,7 +1563,11 @@ struct ContentView: View {
                     Spacer(minLength: 12)
                     VStack(alignment: .trailing, spacing: 2) {
                         if hasBarWeight {
-                            Text("\(Int(currentWeight)) lb (total DBs)").font(.headline)
+                            if usesBarbell {
+                                Text("\(Int(currentWeight)) lb").font(.headline)
+                            } else {
+                                Text("\(Int(currentWeight)) lb (total DBs)").font(.headline)
+                            }
                         } else {
                             Text("Bodyweight").font(.caption).foregroundStyle(.secondary)
                         }
@@ -1486,7 +1578,7 @@ struct ContentView: View {
                 }
                 
                 HStack(spacing: 16) {
-                    // Weight adjustment (only if using dumbbells)
+                    // Weight adjustment (only if weighted)
                     if hasBarWeight {
                         HStack(spacing: 4) {
                             Text("Weight:").font(.caption).foregroundStyle(.secondary)
@@ -1541,8 +1633,20 @@ struct ContentView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                
+                if usesBarbell && !perSide.isEmpty {
+                    Text("Per side: " + plateList(perSide))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                }
             }
             .padding(.vertical, 4)
+        }
+        
+        private func plateList(_ ps: [Double]) -> String {
+            ps.map { $0.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int($0))" : String(format: "%.1f", $0) }
+                .joined(separator: ", ")
         }
     }
     
@@ -1843,7 +1947,7 @@ private struct SettingsSheet: View {
     @Binding var tmProgStyleRaw: String
     @Binding var autoAdvanceWeek: Bool
     
-    // NEW: Assistance exercise selections
+    // Assistance exercise selections
     @Binding var assistSquatID: String
     @Binding var assistBenchID: String
     @Binding var assistDeadliftID: String
@@ -1876,8 +1980,11 @@ private struct SettingsSheet: View {
                 }
                 
                 Section("Loading") {
-                    numField("Bar Weight (lb)", value: $tmpBarWeight, field: .barWeight)
+                    numField("Default Bar Weight (lb)", value: $tmpBarWeight, field: .barWeight)
                     numField("Round To (lb)", value: $tmpRoundTo, field: .roundTo)
+                    Text("Tip: Per-exercise implements override the default for plate math.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 
                 Section("Assistance (BBB)") {
@@ -1970,6 +2077,15 @@ private struct SettingsSheet: View {
                     }
                 }
                 
+                Section("Implements") {
+                    NavigationLink("Configure Implements") {
+                        ImplementsEditorView()
+                    }
+                    Text("Set per-exercise bar/EZ implement weights for plate math.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                
                 Section("Behavior") {
                     Toggle("Auto-advance week after finishing workout", isOn: $autoAdvanceWeek)
                 }
@@ -1979,6 +2095,8 @@ private struct SettingsSheet: View {
                         tmpSquat = "315"; tmpBench = "225"
                         tmpDeadlift = "405"; tmpRow = "185"
                         tmpBarWeight = "45"; tmpRoundTo = "5"
+                        tmpTimerRegular = "240"; tmpTimerBBB = "180"
+                        ImplementWeights.shared.restoreDefaults()
                     } label: {
                         Label("Reset to defaults", systemImage: "arrow.counterclockwise")
                     }
@@ -2035,5 +2153,200 @@ private struct SettingsSheet: View {
                 .frame(width: 100)
                 .focused($focusedField, equals: field)
         }
+    }
+}
+
+// MARK: - Implements Editor (no UIKit keyboard toolbar; stable + fast)
+
+private struct ImplementsEditorView: View {
+    @ObservedObject private var impl = ImplementWeights.shared
+    @State private var q: String = ""
+
+    // Inline editing state
+    @State private var editingID: String? = nil
+    @State private var editingText: String = ""
+    @FocusState private var editingFocused: Bool
+
+    // Constraints / options
+    private let minW = 1.0
+    private let maxW = 200.0
+    private let isDecimalAllowed = false // set true if you want 2.5 etc.
+
+    // Which implements are editable
+    private var items: [(id: String, name: String)] {
+        let mains: [(String,String)] = [
+            ("SQ","Squat (Main)"),
+            ("BP","Bench (Main)"),
+            ("DL","Deadlift (Main)"),
+            ("RW","Row (Main)")
+        ]
+        let bars = AssistanceExercise.catalog
+            .filter { ["front_squat", "paused_squat", "close_grip", "triceps_ext"].contains($0.id) }
+            .map { ($0.id, $0.name) }
+        return (mains + bars)
+            .filter { q.isEmpty || $0.1.localizedCaseInsensitiveContains(q) }
+            .sorted { $0.1 < $1.1 }
+    }
+
+    var body: some View {
+        List {
+            Section(footer: Text("Changes save automatically.")
+                .font(.caption)
+                .foregroundStyle(.secondary)) {
+                ForEach(items, id: \.id) { item in
+                    let id = item.id
+                    let current = impl.weight(for: id)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(item.name)
+                            Spacer()
+
+                            if editingID == id {
+                                // Inline numeric field (fixed width so it never collapses to 0)
+                                TextField("", text: $editingText)
+                                    .keyboardType(isDecimalAllowed ? .decimalPad : .numberPad)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(width: 96) // fixed avoids transient zero width
+                                    .monospacedDigit()
+                                    .focused($editingFocused)
+                                    .submitLabel(.done)
+                                    .onSubmit { commitInlineEdit(for: id) }
+                                    .onChange(of: editingText) { _, t in
+                                        let filtered = filteredNumericString(t, allowDecimal: isDecimalAllowed)
+                                        if filtered != t { editingText = filtered }
+                                    }
+                            } else {
+                                // Current value (tap to edit)
+                                Button {
+                                    editingText = displayString(for: current, decimals: isDecimalAllowed)
+                                    editingID = id // focus toggled in .onChange below
+                                } label: {
+                                    Text("\(displayString(for: current, decimals: isDecimalAllowed)) lb")
+                                        .font(.callout)
+                                        .monospacedDigit()
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("\(item.name) weight, \(Int(current)) pounds, tap to edit")
+                            }
+                        }
+
+                        // Stepper for small nudges
+                        Stepper(value: Binding(
+                            get: { Int(impl.weight(for: id)) },
+                            set: { impl.setWeight(clamp(Double($0)), for: id) }
+                        ), in: Int(minW)...Int(maxW)) {
+                            Text("Adjust")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        // Per-row reset
+                        if Int(current) != Int(defaultFor(id)) {
+                            Button {
+                                impl.setWeight(defaultFor(id), for: id)
+                            } label: {
+                                Label("Reset to default (\(Int(defaultFor(id))) lb)", systemImage: "arrow.counterclockwise")
+                            }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
+            Section {
+                Button {
+                    impl.restoreDefaults()
+                } label: {
+                    Label("Restore All Defaults", systemImage: "arrow.counterclockwise")
+                }
+            }
+        }
+        .navigationTitle("Implements")
+        .searchable(text: $q)
+
+        // Focus management: only toggle here (keeps layout calm)
+        .onChange(of: editingID) { _, newID in
+            if newID != nil {
+                DispatchQueue.main.async { editingFocused = true }
+            } else {
+                editingFocused = false
+            }
+        }
+
+        // Our own "Done" bar above the keyboard — no UIKit toolbar involved
+        .safeAreaInset(edge: .bottom) {
+            if editingFocused {
+                HStack {
+                    Spacer()
+                    Button {
+                        if let id = editingID { commitInlineEdit(for: id) }
+                        resignKeyboard()
+                    } label: {
+                        Label("Done", systemImage: "keyboard.chevron.compact.down")
+                            .font(.body.weight(.semibold))
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .padding(.horizontal)
+                .padding(.top, 8)
+                .padding(.bottom, 8) // sits just above keyboard
+                .background(.ultraThinMaterial)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.default, value: editingFocused)
+    }
+
+    // MARK: - Helpers
+
+    private func commitInlineEdit(for id: String) {
+        let v = parsedNumber(from: editingText, allowDecimal: isDecimalAllowed)
+        let clamped = clamp(v ?? impl.weight(for: id))
+        impl.setWeight(clamped, for: id)
+        editingID = nil
+        editingText = ""
+    }
+
+    private func clamp(_ x: Double) -> Double { max(minW, min(x, maxW)) }
+
+    private func displayString(for x: Double, decimals: Bool) -> String {
+        decimals
+        ? String(format: x.rounded() == x ? "%.0f" : "%.1f", x)
+        : String(format: "%.0f", x)
+    }
+
+    private func filteredNumericString(_ s: String, allowDecimal: Bool) -> String {
+        if allowDecimal {
+            var seenDot = false
+            return s.filter { c in
+                if c.isNumber { return true }
+                if c == "." && !seenDot { seenDot = true; return true }
+                return false
+            }
+        } else {
+            return s.filter(\.isNumber)
+        }
+    }
+
+    private func parsedNumber(from s: String, allowDecimal: Bool) -> Double? {
+        allowDecimal ? Double(s) : Double(Int(s) ?? 0)
+    }
+
+    private func defaultFor(_ id: String) -> Double {
+        let defaults: [String: Double] = [
+            "SQ": 75, "BP": 45, "DL": 45, "RW": 45,
+            "front_squat": 45, "paused_squat": 45, "close_grip": 45, "triceps_ext": 25
+        ]
+        return defaults[id] ?? 45
+    }
+
+    private func resignKeyboard() {
+        #if canImport(UIKit)
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        #endif
     }
 }
