@@ -51,10 +51,69 @@ struct UserGuideView: View {
                 GuideCard {
                     VStack(alignment: .leading, spacing: 12) {
                         SectionHeader("Pro Tips", systemImage: "lightbulb")
-                        Tip("Long-press or swipe", "In History, swipe left to delete an entry.")
+                        Tip("Long-press or swipe",
+                            "In History, swipe left to delete an entry or long-press for extra options like **Delete** or **Copy Summary**.")
                         Tip("Keyboard ‘Done’", "A **Done** button appears above the keyboard to exit text fields quickly.")
                         Tip("Auto-advance week", "Turn this on in Settings and the app will roll to the next week after all four lifts are finished.")
                         Tip("Implements editor", "Set per-exercise bar/EZ weights for precise plate math.")
+                    }
+                }
+                
+                // AMRAP
+                GuideCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionHeader("What Is AMRAP & How It’s Used", systemImage: "bolt.fill")
+                        Text("AMRAP = As Many Reps As Possible — the final set gets you as many reps as you can with good form.")
+                            .foregroundStyle(.primary)
+                        Text("We use AMRAP to estimate your 1RM with the formula:")
+                            .foregroundStyle(.secondary)
+                        Text("`estimated 1RM = weight × (1 + reps/30)`")
+                            .font(.callout.monospacedDigit())
+                            .foregroundStyle(.blue)
+                        Text("If you enable “Auto TM from AMRAP,” the app can adjust your Training Max over time based on these estimates.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                // 5/3/1 Basic Info
+                GuideCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionHeader("About 5/3/1", systemImage: "dial.high")
+                        Text("5/3/1 is a simple but effective strength program. Each cycle has 3 ‘work’ weeks and 1 deload week. The final set each week is AMRAP so you push yourself.")
+                            .foregroundStyle(.primary)
+                        Text("It’s great for beginner → intermediate lifters because periodization is tricky, and 5/3/1 removes complexity. The body adapts to stress, so incremental progression matters.")
+                            .foregroundStyle(.secondary)
+                        Text("Many lifters use 5/3/1 for years with tweaks in assistance, volume, or auto-TM modes. When you’re ready, you’ll already know how to program your own variations.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                
+                GuideCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionHeader("Deload Week", systemImage: "leaf.arrow.circlepath")
+                        Text("Every fourth week in 5/3/1 is a **deload** — a planned recovery phase using lighter weights and lower volume.")
+                            .foregroundStyle(.primary)
+                        Text("It might feel like you're taking a step back, but deloads are where your body actually **adapts and grows stronger** from the stress you’ve accumulated.")
+                            .foregroundStyle(.secondary)
+                        Bullet("Reduces fatigue and joint stress.")
+                        Bullet("Allows the nervous system and connective tissues to recover.")
+                        Bullet("Prevents plateaus and burnout so you can keep progressing for years.")
+                        Text("Skipping deloads isn’t just counterproductive — it’s a fast track to burnout and stalled progress, especially for older or experienced lifters. A deload isn’t optional recovery; it’s the only way to bleed off accumulated stress and let your body rebound. You’ll be amazed how much stronger, fresher, and more explosive you feel after a true recovery week.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                // TM Setting
+                GuideCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionHeader("Setting Your Initial TM", systemImage: "gauge")
+                        Text("Most people don’t know their real TM. Here’s a safe starting method:")
+                            .foregroundStyle(.primary)
+                        Bullet("Use your best recent lift and take ~85–90% of it.")
+                        Bullet("If you’ve never lifted: pick a weight for ~5 reps and estimate 1RM, then reduce by 10%.")
+                        Bullet("Start conservatively — it’s okay if the first cycle feels lighter.")
+                        Text("Over time, let AMRAP estimates adjust it if you use auto mode.")
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -69,7 +128,7 @@ struct UserGuideView: View {
                         FAQ("Why is the estimated 1RM blank?",
                             "It appears after you enter AMRAP reps on the final set for Week 1–3.")
                         FAQ("Deload week?",
-                            "Week 4 hides BBB/assistance and shows a short deload note on the main card.")
+                            "Week 4 is your deload — a built-in recovery phase. You’ll use lighter weights, lower volume, and skip BBB/assistance work so your body can heal and adapt. Focus this week on sleep, nutrition, stress management, and gentle movement — light cardio, walks, mobility work. This isn’t downtime; it’s where progress locks in and you recharge for the next cycle.")
                     }
                 }
 
