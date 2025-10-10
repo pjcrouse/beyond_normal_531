@@ -918,8 +918,6 @@ struct ContentView: View {
     @FocusState private var amrapFocused: Bool
     @FocusState private var notesFocused: Bool
     
-    @State private var showGuide = false
-    
     private var calculator: PlateCalculator {
         PlateCalculator(barWeight: barWeightForSelectedLift, roundTo: roundTo, inventory: [45, 35, 25, 10, 5, 2.5])
     }
@@ -975,12 +973,6 @@ struct ContentView: View {
                         Image(systemName: "gearshape")
                     }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showGuide = true } label: {
-                        Image(systemName: "questionmark.circle")
-                    }
-                    .accessibilityLabel("User Guide")
-                }
                 
                 // Keyboard toolbar - Done button
                 ToolbarItemGroup(placement: .keyboard) {
@@ -1015,19 +1007,6 @@ struct ContentView: View {
         .sheet(isPresented: $showHistory) {
             HistorySheet()
                 .presentationDetents([.medium, .large])
-        }
-        .sheet(isPresented: $showGuide) {
-            NavigationStack {
-                UserGuideView()
-                    .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button("Done") { showGuide = false }
-                        }
-                    }
-            }
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
-            .interactiveDismissDisabled(false)
         }
         .alert("Reset current lift?", isPresented: $showResetConfirm) {
             Button("Reset", role: .destructive) {
@@ -2384,12 +2363,6 @@ private struct SettingsSheet: View {
                     } label: {
                         Label("Reset to defaults", systemImage: "arrow.counterclockwise")
                     }
-                }
-                Section("Help & Support") {
-                    NavigationLink("User Guide 📖") {
-                        UserGuideView()
-                    }
-                    Link("Send Feedback Email", destination: URL(string: "mailto:support@beyondnormal.app")!)
                 }
             }
             .toolbar {
