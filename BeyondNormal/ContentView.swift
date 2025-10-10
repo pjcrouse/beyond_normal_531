@@ -1019,11 +1019,6 @@ struct ContentView: View {
         .sheet(isPresented: $showGuide) {
             NavigationStack {
                 UserGuideView()
-                    .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button("Done") { showGuide = false }
-                        }
-                    }
             }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
@@ -2057,6 +2052,29 @@ private struct HistorySheet: View {
                         .contentShape(Rectangle())
                         .onTapGesture {
                             if expanded.contains(e.id) { expanded.remove(e.id) } else { expanded.insert(e.id) }
+                        }
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                delete(e)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+
+                            // (optional) extras
+                            Button {
+                                let formattedVolume = NumberFormatter.localizedString(from: NSNumber(value: e.totalVolume),
+                                                                                      number: .decimal)
+                                let formatted1RM = NumberFormatter.localizedString(from: NSNumber(value: Int(e.est1RM)),
+                                                                                   number: .decimal)
+                                let dateString = e.date.formatted(date: .abbreviated, time: .omitted)
+                                let summary = """
+                                \(e.lift): \(dateString)
+                                1RM \(formatted1RM) lb • Volume \(formattedVolume) lb
+                                """
+                                UIPasteboard.general.string = summary
+                            } label: {
+                                Label("Copy summary", systemImage: "doc.on.doc")
+                            }
                         }
                         .swipeActions {
                             Button(role: .destructive) {
