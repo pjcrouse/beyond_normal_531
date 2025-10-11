@@ -53,7 +53,7 @@ final class ImplementWeights: ObservableObject {
         map[exerciseID] ?? defaults[exerciseID] ?? 45
     }
 
-    func weight(for lift: ContentView.Lift) -> Double {
+    func weight(for lift: Lift) -> Double {
         weight(for: lift.rawValue)
     }
 
