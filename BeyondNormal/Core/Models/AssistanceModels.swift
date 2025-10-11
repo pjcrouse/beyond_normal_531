@@ -84,6 +84,14 @@ extension AssistanceExercise {
               defaultWeight: 0, defaultReps: 8,
               allowWeightToggle: false, toggledWeight: 0,
               usesImpliedImplements: false, category: .core),
+        .init(id: "db_rdl", name: "RDL (DB)",
+              defaultWeight: 30, defaultReps: 10,
+              allowWeightToggle: false, toggledWeight: 0,
+              usesImpliedImplements: false, category: .core),
+        .init(id: "ssb_gm", name: "SSB Good Morning",
+              defaultWeight: 95, defaultReps: 8,
+              allowWeightToggle: false, toggledWeight: 0,
+              usesImpliedImplements: false, category: .core),
     ]
     
     static func byID(_ id: String) -> AssistanceExercise? {

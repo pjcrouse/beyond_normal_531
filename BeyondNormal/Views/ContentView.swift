@@ -266,7 +266,8 @@ struct ContentView: View {
                     if !allowTimerStarts { allowTimerStarts = true }
                     if !timer.allowStarts { timer.allowStarts = true }
                 },
-                isWorkoutFinished: isWorkoutFinished
+                isWorkoutFinished: isWorkoutFinished,
+                tmFor: { lift in tmFor(lift) }
             )
 
             SummaryCard(
