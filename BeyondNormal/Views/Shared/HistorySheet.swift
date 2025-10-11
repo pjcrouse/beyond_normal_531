@@ -5,7 +5,7 @@ struct HistorySheet: View {
     @State private var expanded: Set<UUID> = []
 
     // Weekly summary presentation state
-    @State private var weeklyResult: WeeklySummaryResult? = nil
+    @State private var weeklyResult: WeeklySummaryResult?
 
     var body: some View {
         NavigationStack {
@@ -48,8 +48,7 @@ struct HistorySheet: View {
                                     .padding(.top, 2)
 
                                 Button(expanded.contains(e.id) ? "Show less" : "Show more") {
-                                    if expanded.contains(e.id) { expanded.remove(e.id) }
-                                    else { expanded.insert(e.id) }
+                                    if expanded.contains(e.id) { expanded.remove(e.id) } else { expanded.insert(e.id) }
                                 }
                                 .font(.caption)
                                 .buttonStyle(.plain)
@@ -59,8 +58,7 @@ struct HistorySheet: View {
                         .padding(.vertical, 4)
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            if expanded.contains(e.id) { expanded.remove(e.id) }
-                            else { expanded.insert(e.id) }
+                            if expanded.contains(e.id) { expanded.remove(e.id) } else { expanded.insert(e.id) }
                         }
                         .contextMenu {
                             Button(role: .destructive) {

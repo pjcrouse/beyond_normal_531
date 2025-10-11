@@ -22,33 +22,36 @@ struct ProgramEngine {
         switch week {
         case 2:
             return .init(
-                main: [.init(pct:0.70, reps:3, amrap:false),
-                       .init(pct:0.80, reps:3, amrap:false),
-                       .init(pct:0.90, reps:3, amrap:true)],
+                main: [.init(pct: 0.70, reps: 3, amrap: false),
+                       .init(pct: 0.80, reps: 3, amrap: false),
+                       .init(pct: 0.90, reps: 3, amrap: true)],
                 showBBB: true,
                 topLine: "90% × 3+"
             )
+
         case 3:
             return .init(
-                main: [.init(pct:0.75, reps:5, amrap:false),
-                       .init(pct:0.85, reps:3, amrap:false),
-                       .init(pct:0.95, reps:1, amrap:true)],
+                main: [.init(pct: 0.75, reps: 5, amrap: false),
+                       .init(pct: 0.85, reps: 3, amrap: false),
+                       .init(pct: 0.95, reps: 1, amrap: true)],
                 showBBB: true,
                 topLine: "95% × 1+"
             )
+
         case 4:
             return .init(
-                main: [.init(pct:0.40, reps:5, amrap:false),
-                       .init(pct:0.50, reps:5, amrap:false),
-                       .init(pct:0.60, reps:5, amrap:false)],
+                main: [.init(pct: 0.40, reps: 5, amrap: false),
+                       .init(pct: 0.50, reps: 5, amrap: false),
+                       .init(pct: 0.60, reps: 5, amrap: false)],
                 showBBB: false,
                 topLine: "Deload: 60% × 5"
             )
+
         default:
             return .init(
-                main: [.init(pct:0.65, reps:5, amrap:false),
-                       .init(pct:0.75, reps:5, amrap:false),
-                       .init(pct:0.85, reps:5, amrap:true)],
+                main: [.init(pct: 0.65, reps: 5, amrap: false),
+                       .init(pct: 0.75, reps: 5, amrap: false),
+                       .init(pct: 0.85, reps: 5, amrap: true)],
                 showBBB: true,
                 topLine: "85% × 5+"
             )
@@ -68,6 +71,7 @@ struct ProgramEngine {
         case .classic:
             // +5 upper / +10 lower per cycle
             return current + (isUpperBody ? 5 : 10)
+
         case .auto:
             guard let latest = latestAMRAP1RM, latest > 0 else { return current }
             // 90% of latest AMRAP 1RM, but cap the increase per cycle

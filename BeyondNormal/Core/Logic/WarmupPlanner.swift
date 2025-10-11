@@ -55,7 +55,7 @@ func buildWarmupPlan(target: Double, bar: Double, roundTo: Double) -> [WarmupSte
     case ...85:
         var high = r(target * 0.90)
         if high >= target { high = r(target - roundTo) }
-        if high <= bar    { high = r(bar + 20) }
+        if high <= bar { high = r(bar + 20) }
 
         let mid = r((bar + high) / 2.0)
 
@@ -75,6 +75,7 @@ func buildWarmupPlan(target: Double, bar: Double, roundTo: Double) -> [WarmupSte
             let high = candidates.last!
             candidates = [low, mid, high]
         }
+
     default:
         break
     }
@@ -96,7 +97,7 @@ func buildWarmupPlan(target: Double, bar: Double, roundTo: Double) -> [WarmupSte
     }
 
     steps = steps.sorted { $0.weight < $1.weight }
-                 .filter { $0.weight < target }
+        .filter { $0.weight < target }
 
     if steps.count == 1, target - bar >= 20 {
         let mid = r((target + bar) / 2.0)

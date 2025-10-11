@@ -65,7 +65,7 @@ public enum LoadFormat {
     /// "Per side: 45, 10, 2.5"
     public static func plateList(_ plates: [Double]) -> String {
         plates.map { $0.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int($0))" : String(format: "%.1f", $0) }
-              .joined(separator: ", ")
+            .joined(separator: ", ")
     }
 
     /// 215 -> "215", 215.5 -> "215.5"

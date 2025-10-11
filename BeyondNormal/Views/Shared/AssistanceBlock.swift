@@ -24,10 +24,10 @@ struct AssistanceBlock: View {
     /// Timer gating: allow + explicit arming (prevents auto-start on app launch)
     let allowTimerStarts: Bool
     let armTimers: () -> Void
-    
+
     /// NEW: Whether this workout has been marked as finished
     let isWorkoutFinished: Bool
-    
+
     // NEW: access to training maxes
     let tmFor: (Lift) -> Double
 
@@ -40,7 +40,6 @@ struct AssistanceBlock: View {
         let refreshID = "\(selectedLift.rawValue)-\(currentWeek)"
 
         // Which assistance use a barbell (plates + implement)?
-        // Include triceps_ext so Lying Triceps Extension uses the EZ-bar implement.
         let barAssistanceIDs: Set<String> = [
             "front_squat", "paused_squat", "close_grip", "triceps_ext", "ssb_gm"
         ]
@@ -49,12 +48,11 @@ struct AssistanceBlock: View {
         // Per-exercise implement (e.g. 25 lb EZ-bar for triceps_ext)
         let implementW = implements.weight(for: ex.id)
 
-        return Group {
+        return VStack(alignment: .leading, spacing: 12) {
             if scheme.showBBB {
-                Divider().padding(.vertical, 6)
+                Divider().padding(.vertical, 4) // match WorkoutBlock
 
                 // Whether the block uses weight at all
-                // Barbell assistance: always true. Otherwise depend on toggle/defaults.
                 let hasBarWeight: Bool = {
                     if usesBarbell { return true }
                     if ex.allowWeightToggle {
@@ -90,8 +88,6 @@ struct AssistanceBlock: View {
                     Text("Assistance — \(ex.name)")
                         .font(.headline)
 
-                    // Only show the dumbbell toggle for non-barbell exercises that allow it,
-                    // and never for DB RDL (we always want it weighted) or SSB GM (barbell).
                     if showToggle {
                         Toggle(isOn: Binding(
                             get: { workoutState.getAssistUseWeight(lift: selectedLift.rawValue, week: currentWeek) },
@@ -103,7 +99,7 @@ struct AssistanceBlock: View {
                         .toggleStyle(.switch)
                     }
 
-                    // ⬇️ NEW: TM-based hint captions
+                    // TM-based hints
                     if isSSBGM {
                         let dlTM = tmFor(.deadlift)
                         let suggest = recommendedSSBGMWeight(deadliftTM: dlTM, barWeight: implementW, roundTo: roundTo)
@@ -131,7 +127,6 @@ struct AssistanceBlock: View {
                         done: assistSetBinding(setNum),
                         currentWeight: Binding(
                             get: {
-                                // Always re-read from state; clamp to implement when barbell.
                                 let saved = workoutState.getAssistWeight(
                                     lift: selectedLift.rawValue,
                                     week: currentWeek,
@@ -185,18 +180,19 @@ struct AssistanceBlock: View {
                                 }
                             }
                         ),
-                        // Plates per side when barbell + weighted
                         perSide: (usesBarbell && hasBarWeight)
-                            ? calculator.plates(target: {
-                                let saved = workoutState.getAssistWeight(
-                                    lift: selectedLift.rawValue,
-                                    week: currentWeek,
-                                    set: setNum
-                                ) ?? defaultWeight
-                                let v = usesBarbell ? max(saved, implementW) : saved
-                                return v
-                              }(),
-                              barWeight: implementW)
+                            ? calculator.plates(
+                                target: {
+                                    let saved = workoutState.getAssistWeight(
+                                        lift: selectedLift.rawValue,
+                                        week: currentWeek,
+                                        set: setNum
+                                    ) ?? defaultWeight
+                                    let v = usesBarbell ? max(saved, implementW) : saved
+                                    return v
+                                }(),
+                                barWeight: implementW
+                            )
                             : [],
                         roundTo: roundTo,
                         onCheck: { checked in
@@ -214,5 +210,7 @@ struct AssistanceBlock: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .cardStyle()
+        .padding(.horizontal)
     }
 }
