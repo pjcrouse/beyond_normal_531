@@ -12,7 +12,7 @@ struct ContentView: View {
     @AppStorage("tm_deadlift") private var tmDeadlift: Double = 405
     @AppStorage("tm_row")      private var tmRow: Double = 185
 
-    @AppStorage("bar_weight")  private var barWeight: Double = 45   // global fallback (not used for plate math when per-exercise is present)
+    @AppStorage("bar_weight")  private var barWeight: Double = 45
     @AppStorage("round_to")    private var roundTo: Double = 5
     @AppStorage("bbb_pct")     private var bbbPct: Double = 0.50
 
@@ -29,7 +29,7 @@ struct ContentView: View {
     @AppStorage("tm_progression_style") private var tmProgStyleRaw: String = "classic"
     @AppStorage("auto_advance_week")    private var autoAdvanceWeek: Bool = false
 
-    // NEW: User-selected assistance exercise IDs
+    // Selected assistance by main lift
     @AppStorage("assist_squat_id")    private var assistSquatID: String = "split_squat"
     @AppStorage("assist_bench_id")    private var assistBenchID: String = "triceps_ext"
     @AppStorage("assist_deadlift_id") private var assistDeadliftID: String = "back_ext"
@@ -53,23 +53,34 @@ struct ContentView: View {
 
     @State private var showGuide = false
 
+    // Gate that views check before calling timer.start(...)
+    @State private var allowTimerStarts = false
+
     private let program = ProgramEngine()
 
     private var calculator: PlateCalculator {
-        PlateCalculator(barWeight: barWeightForSelectedLift, roundTo: roundTo, inventory: [45, 35, 25, 10, 5, 2.5])
+        PlateCalculator(barWeight: barWeightForSelectedLift,
+                        roundTo: roundTo,
+                        inventory: [45, 35, 25, 10, 5, 2.5])
     }
 
     private var barWeightForSelectedLift: Double {
         implements.weight(for: selectedLift)
     }
 
-    // MARK: - Small computed props to simplify body
+    // MARK: - Small computed props
 
     private var currentScheme: WeekSchemeResult { program.weekScheme(for: currentWeek) }
     private var tmSelected: Double { tmFor(selectedLift) }
     private var topWeight: Double {
         let pct = currentScheme.main.last?.pct ?? 0.85
         return calculator.round(tmSelected * pct)
+    }
+
+    // Arm both the view-level and manager-level gates on first user action
+    private func armTimers() {
+        allowTimerStarts = true
+        timer.allowStarts = true
     }
 
     // MARK: - Body
@@ -92,9 +103,11 @@ struct ContentView: View {
                     Button { showHistory = true } label: {
                         Label("History", systemImage: "clock.arrow.circlepath")
                     }
+                    .accessibilityLabel("History")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showSettings = true } label: { Image(systemName: "gearshape") }
+                        .accessibilityLabel("Settings")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showGuide = true } label: { Image(systemName: "questionmark.circle") }
@@ -156,7 +169,14 @@ struct ContentView: View {
             let center = UNUserNotificationCenter.current()
             center.delegate = LocalNotifDelegate.shared
             requestNotifsIfNeeded()
+
+            // Ensure timer is fully idle at launch & blocked
+            timer.reset()
+            timer.allowStarts = false
+            allowTimerStarts = false
+
             liveRepsText = repsText(for: selectedLift)
+            // NOTE: We do NOT arm timers here. armTimers() runs on first user action.
         }
         .onChange(of: selectedLift) { _, new in
             liveRepsText = repsText(for: new)
@@ -166,12 +186,12 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Main scroll content (split out for compiler sanity)
+    // MARK: - Main scroll content (split out)
 
     @ViewBuilder
     private var mainContent: some View {
-        // compute metrics once
         let m = currentWorkoutMetrics()
+        let isWorkoutFinished = workoutState.isWorkoutFinished(lift: selectedLift.rawValue, week: currentWeek)
 
         VStack(spacing: 16) {
             headerView
@@ -213,8 +233,12 @@ struct ContentView: View {
                 timerBBBsec: timerBBBsec,
                 est1RM: { lift, w in est1RM(for: lift, weight: w) },
                 setBinding: setBinding,
+                tmFor: { lift in tmFor(lift) },
                 liveRepsText: $liveRepsText,
-                workoutState: workoutState
+                workoutState: workoutState,
+                allowTimerStarts: allowTimerStarts,
+                armTimers: armTimers,
+                isWorkoutFinished: isWorkoutFinished
             )
 
             AssistanceBlock(
@@ -228,7 +252,21 @@ struct ContentView: View {
                 timer: timer,
                 timerBBBsec: timerBBBsec,
                 assistanceFor: assistanceExerciseFor(_:),
-                assistSetBinding: assistSetBinding(_:)
+                assistSetBinding: assistSetBinding(_:),
+                legacyAssistDefault: { lift in
+                    switch lift {
+                    case .squat:    return assistWeightSquat == 0 ? nil : assistWeightSquat
+                    case .bench:    return assistWeightBench == 0 ? nil : assistWeightBench
+                    case .deadlift: return assistWeightDeadlift == 0 ? nil : assistWeightDeadlift
+                    case .row:      return assistWeightRow == 0 ? nil : assistWeightRow
+                    }
+                },
+                allowTimerStarts: allowTimerStarts,
+                armTimers: {
+                    if !allowTimerStarts { allowTimerStarts = true }
+                    if !timer.allowStarts { timer.allowStarts = true }
+                },
+                isWorkoutFinished: isWorkoutFinished
             )
 
             SummaryCard(
@@ -236,6 +274,7 @@ struct ContentView: View {
                 est1RM: m.est,
                 totals: (total: m.totalVol, main: m.mainVol, bbb: m.bbbVol, assist: m.assistVol)
             )
+            .cardStyle()
 
             finishButton
 
@@ -276,6 +315,7 @@ struct ContentView: View {
                 .font(.headline)
         }
         .buttonStyle(.borderedProminent)
+        .accessibilityLabel("Finish workout")
     }
 
     private var resetButton: some View {
@@ -284,6 +324,7 @@ struct ContentView: View {
         } label: {
             Label("Reset Workout (Current Lift)", systemImage: "arrow.uturn.backward")
         }
+        .accessibilityLabel("Reset current lift")
     }
 
     // MARK: - Helpers
@@ -331,7 +372,6 @@ struct ContentView: View {
         workoutNotes = ""
         liveRepsText = ""
 
-        // Keep legacy per-lift default assistance weight baselines
         switch selectedLift {
         case .squat:    assistWeightSquat = 0
         case .bench:    assistWeightBench = 65
@@ -361,7 +401,6 @@ struct ContentView: View {
         let scheme = program.weekScheme(for: currentWeek)
         let tmSel = tmFor(selectedLift)
 
-        // MAIN sets
         func mainSetVol(_ idx: Int) -> Double {
             let s = scheme.main[idx]
             let w = calculator.round(tmSel * s.pct)
@@ -370,11 +409,10 @@ struct ContentView: View {
         }
         let mainVol = Int(mainSetVol(0) + mainSetVol(1) + mainSetVol(2))
 
-        // BBB volume
         let defaultBBBW = calculator.round(tmSel * bbbPct)
         var bbbVol = 0.0
         for setNum in 1...5 {
-            let mainSetNum = setNum + 3 // Sets 4-8
+            let mainSetNum = setNum + 3 // sets 4–8
             if workoutState.getSetComplete(lift: selectedLift.rawValue, week: currentWeek, set: mainSetNum) {
                 let weight = workoutState.getBBBWeight(lift: selectedLift.rawValue, week: currentWeek, set: setNum) ?? defaultBBBW
                 let reps = workoutState.getBBBReps(lift: selectedLift.rawValue, week: currentWeek, set: setNum) ?? 10
@@ -382,12 +420,13 @@ struct ContentView: View {
             }
         }
 
-        // Assistance volume
         let ex = assistanceExerciseFor(selectedLift)
-        let defaultAssistW = ex.defaultWeight > 0 ? ex.defaultWeight : (ex.allowWeightToggle && workoutState.getAssistUseWeight(lift: selectedLift.rawValue, week: currentWeek) ? ex.toggledWeight : 0)
+        let defaultAssistW = ex.defaultWeight > 0 ? ex.defaultWeight :
+            (ex.allowWeightToggle && workoutState.getAssistUseWeight(lift: selectedLift.rawValue, week: currentWeek) ? ex.toggledWeight : 0)
+
         var assistVol = 0.0
         for setNum in 1...3 {
-            if scheme.showBBB && workoutState.getAssistComplete(lift: selectedLift.rawValue, week: currentWeek, set: setNum) {
+            if currentScheme.showBBB && workoutState.getAssistComplete(lift: selectedLift.rawValue, week: currentWeek, set: setNum) {
                 let weight = workoutState.getAssistWeight(lift: selectedLift.rawValue, week: currentWeek, set: setNum) ?? defaultAssistW
                 let reps = workoutState.getAssistReps(lift: selectedLift.rawValue, week: currentWeek, set: setNum) ?? ex.defaultReps
                 assistVol += weight * Double(reps)
@@ -396,8 +435,7 @@ struct ContentView: View {
 
         let totalVol = Int(mainVol) + Int(bbbVol) + Int(assistVol)
 
-        // Est 1RM
-        let top = scheme.main[2]
+        let top = currentScheme.main[2]
         let est: Double = {
             guard top.amrap else { return 0 }
             let amrapReps = workoutState.getAMRAP(lift: selectedLift.rawValue, week: currentWeek)
@@ -431,6 +469,9 @@ struct ContentView: View {
             notes: workoutNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : workoutNotes
         )
         WorkoutStore.shared.append(entry)
+
+        // Mark this workout as finished
+        workoutState.markWorkoutFinished(lift: selectedLift.rawValue, week: currentWeek)
 
         timer.reset()
         workoutNotes = ""

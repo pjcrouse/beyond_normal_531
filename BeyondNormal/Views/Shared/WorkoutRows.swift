@@ -8,13 +8,17 @@ public struct SetRow: View {
     public let perSide: [Double]
     @Binding public var done: Bool
     public var onCheck: ((Bool) -> Void)?
+    public let refreshID: String
 
-    public init(label: String, weight: Double, perSide: [Double], done: Binding<Bool>, onCheck: ((Bool) -> Void)? = nil) {
+    @State private var lastKnownDone: Bool = false
+
+    public init(label: String, weight: Double, perSide: [Double], done: Binding<Bool>, onCheck: ((Bool) -> Void)? = nil, refreshID: String = "") {
         self.label = label
         self.weight = weight
         self.perSide = perSide
         self._done = done
         self.onCheck = onCheck
+        self.refreshID = refreshID
     }
 
     public var body: some View {
@@ -30,7 +34,23 @@ public struct SetRow: View {
                 }
             }
         }
-        .onChange(of: done) { _, new in onCheck?(new) }
+        .onChange(of: done) { old, new in
+            guard lastKnownDone == old else {
+                lastKnownDone = new
+                return
+            }
+            
+            if !old && new {
+                onCheck?(true)
+            }
+            lastKnownDone = new
+        }
+        .onAppear {
+            lastKnownDone = done
+        }
+        .task(id: refreshID) {
+            lastKnownDone = done
+        }
     }
 }
 
@@ -43,8 +63,11 @@ public struct AMRAPRow: View {
     public let est1RM: Double
     public var onCheck: ((Bool) -> Void)?
     public var focus: FocusState<Bool>.Binding
+    public let refreshID: String
 
-    public init(label: String, weight: Double, perSide: [Double], done: Binding<Bool>, reps: Binding<String>, est1RM: Double, onCheck: ((Bool) -> Void)? = nil, focus: FocusState<Bool>.Binding) {
+    @State private var lastKnownDone: Bool = false
+
+    public init(label: String, weight: Double, perSide: [Double], done: Binding<Bool>, reps: Binding<String>, est1RM: Double, onCheck: ((Bool) -> Void)? = nil, focus: FocusState<Bool>.Binding, refreshID: String = "") {
         self.label = label
         self.weight = weight
         self.perSide = perSide
@@ -53,6 +76,7 @@ public struct AMRAPRow: View {
         self.est1RM = est1RM
         self.onCheck = onCheck
         self.focus = focus
+        self.refreshID = refreshID
     }
 
     public var body: some View {
@@ -69,7 +93,6 @@ public struct AMRAPRow: View {
                     }
                 }
             }
-            .onChange(of: done) { _, new in onCheck?(new) }
 
             HStack {
                 Text("AMRAP reps:")
@@ -97,6 +120,23 @@ public struct AMRAPRow: View {
                 }
             }
         }
+        .onChange(of: done) { old, new in
+            guard lastKnownDone == old else {
+                lastKnownDone = new
+                return
+            }
+            
+            if !old && new {
+                onCheck?(true)
+            }
+            lastKnownDone = new
+        }
+        .onAppear {
+            lastKnownDone = done
+        }
+        .task(id: refreshID) {
+            lastKnownDone = done
+        }
     }
 }
 
@@ -110,8 +150,11 @@ public struct BBBSetRow: View {
     public let perSide: [Double]
     public let roundTo: Double
     public var onCheck: ((Bool) -> Void)?
+    public let refreshID: String
 
-    public init(setNumber: Int, defaultWeight: Double, defaultReps: Int, done: Binding<Bool>, currentWeight: Binding<Double>, currentReps: Binding<Int>, perSide: [Double], roundTo: Double, onCheck: ((Bool) -> Void)? = nil) {
+    @State private var lastKnownDone: Bool = false
+
+    public init(setNumber: Int, defaultWeight: Double, defaultReps: Int, done: Binding<Bool>, currentWeight: Binding<Double>, currentReps: Binding<Int>, perSide: [Double], roundTo: Double, onCheck: ((Bool) -> Void)? = nil, refreshID: String = "") {
         self.setNumber = setNumber
         self.defaultWeight = defaultWeight
         self.defaultReps = defaultReps
@@ -121,6 +164,7 @@ public struct BBBSetRow: View {
         self.perSide = perSide
         self.roundTo = roundTo
         self.onCheck = onCheck
+        self.refreshID = refreshID
     }
 
     public var body: some View {
@@ -137,7 +181,6 @@ public struct BBBSetRow: View {
                     }
                 }
             }
-            .onChange(of: done) { _, new in onCheck?(new) }
 
             HStack(spacing: 16) {
                 HStack(spacing: 4) {
@@ -165,6 +208,23 @@ public struct BBBSetRow: View {
             .buttonStyle(.plain)
         }
         .padding(.vertical, 4)
+        .onChange(of: done) { old, new in
+            guard lastKnownDone == old else {
+                lastKnownDone = new
+                return
+            }
+            
+            if !old && new {
+                onCheck?(true)
+            }
+            lastKnownDone = new
+        }
+        .onAppear {
+            lastKnownDone = done
+        }
+        .task(id: refreshID) {
+            lastKnownDone = done
+        }
     }
 }
 
@@ -180,8 +240,11 @@ public struct AssistSetRow: View {
     public let perSide: [Double]
     public let roundTo: Double
     public var onCheck: ((Bool) -> Void)?
+    public let refreshID: String
 
-    public init(setNumber: Int, defaultWeight: Double, defaultReps: Int, hasBarWeight: Bool, usesBarbell: Bool, done: Binding<Bool>, currentWeight: Binding<Double>, currentReps: Binding<Int>, perSide: [Double], roundTo: Double, onCheck: ((Bool) -> Void)? = nil) {
+    @State private var lastKnownDone: Bool = false
+
+    public init(setNumber: Int, defaultWeight: Double, defaultReps: Int, hasBarWeight: Bool, usesBarbell: Bool, done: Binding<Bool>, currentWeight: Binding<Double>, currentReps: Binding<Int>, perSide: [Double], roundTo: Double, onCheck: ((Bool) -> Void)? = nil, refreshID: String = "") {
         self.setNumber = setNumber
         self.defaultWeight = defaultWeight
         self.defaultReps = defaultReps
@@ -193,6 +256,7 @@ public struct AssistSetRow: View {
         self.perSide = perSide
         self.roundTo = roundTo
         self.onCheck = onCheck
+        self.refreshID = refreshID
     }
 
     public var body: some View {
@@ -209,7 +273,6 @@ public struct AssistSetRow: View {
                     }
                 }
             }
-            .onChange(of: done) { _, new in onCheck?(new) }
 
             HStack(spacing: 16) {
                 if hasBarWeight {
@@ -247,5 +310,22 @@ public struct AssistSetRow: View {
             }
         }
         .padding(.vertical, 4)
+        .onChange(of: done) { old, new in
+            guard lastKnownDone == old else {
+                lastKnownDone = new
+                return
+            }
+            
+            if !old && new {
+                onCheck?(true)
+            }
+            lastKnownDone = new
+        }
+        .onAppear {
+            lastKnownDone = done
+        }
+        .task(id: refreshID) {
+            lastKnownDone = done
+        }
     }
 }

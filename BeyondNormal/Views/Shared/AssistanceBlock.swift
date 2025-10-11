@@ -12,31 +12,77 @@ struct AssistanceBlock: View {
     let timer: TimerManager
     let timerBBBsec: Int
 
-    /// Closure to map the selected main lift to the chosen assistance exercise
+    /// Map the selected main lift to the chosen assistance exercise
     let assistanceFor: (Lift) -> AssistanceExercise
 
     /// Binding provider for assist set completion (sets 1...3)
     let assistSetBinding: (Int) -> Binding<Bool>
 
+    /// Legacy default weights per main lift (e.g. 65 for bench); return nil if none.
+    let legacyAssistDefault: (Lift) -> Double?
+
+    /// Timer gating: allow + explicit arming (prevents auto-start on app launch)
+    let allowTimerStarts: Bool
+    let armTimers: () -> Void
+    
+    /// NEW: Whether this workout has been marked as finished
+    let isWorkoutFinished: Bool
+
     var body: some View {
         let scheme = program.weekScheme(for: currentWeek)
         let ex = assistanceFor(selectedLift)
+        let refreshID = "\(selectedLift.rawValue)-\(currentWeek)"
 
-        // Assistance that should render barbell plates
-        let barAssistanceIDs: Set<String> = ["front_squat", "paused_squat", "close_grip"]
+        // Which assistance use a barbell (plates + implement)?
+        // Include triceps_ext so Lying Triceps Extension uses the EZ-bar implement.
+        let barAssistanceIDs: Set<String> = [
+            "front_squat", "paused_squat", "close_grip", "triceps_ext"
+        ]
         let usesBarbell = barAssistanceIDs.contains(ex.id)
+
+        // Per-exercise implement (e.g. 25 lb EZ-bar for triceps_ext)
         let implementW = implements.weight(for: ex.id)
 
         return Group {
             if scheme.showBBB {
                 Divider().padding(.vertical, 6)
 
+                // Whether the block uses weight at all
+                // Barbell assistance: always true. Otherwise depend on toggle/defaults.
+                let hasBarWeight: Bool = {
+                    if usesBarbell { return true }
+                    if ex.allowWeightToggle {
+                        return workoutState.getAssistUseWeight(lift: selectedLift.rawValue, week: currentWeek)
+                    }
+                    return ex.defaultWeight > 0
+                }()
+
+                // Default weight:
+                // 1) Barbell: prefer legacy per-lift default if present (e.g. 65 for bench),
+                //    then clamp to at least the implement weight (e.g., 25 for EZ-bar).
+                // 2) Non-barbell: follow toggle/default rules.
+                let defaultWeight: Double = {
+                    if usesBarbell {
+                        let legacy = legacyAssistDefault(selectedLift)
+                        let base = legacy ?? (ex.defaultWeight > 0 ? ex.defaultWeight : implementW)
+                        return max(base, implementW)
+                    } else if ex.allowWeightToggle {
+                        return workoutState.getAssistUseWeight(lift: selectedLift.rawValue, week: currentWeek)
+                            ? ex.toggledWeight
+                            : ex.defaultWeight
+                    } else {
+                        return ex.defaultWeight
+                    }
+                }()
+
+                // Only show the dumbbell toggle for non-barbell exercises that allow it
+                let showToggle = ex.allowWeightToggle && !usesBarbell
+
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Assistance — \(ex.name)")
                         .font(.headline)
 
-                    // Only show toggle if the exercise allows it
-                    if ex.allowWeightToggle {
+                    if showToggle {
                         Toggle(isOn: Binding(
                             get: { workoutState.getAssistUseWeight(lift: selectedLift.rawValue, week: currentWeek) },
                             set: { workoutState.setAssistUseWeight(lift: selectedLift.rawValue, week: currentWeek, useWeight: $0) }
@@ -48,43 +94,28 @@ struct AssistanceBlock: View {
                     }
                 }
 
-                // Whether we’re using any load at all for this assistance block
-                let useWeight =
-                    ex.defaultWeight > 0 ||
-                    (ex.allowWeightToggle && workoutState.getAssistUseWeight(lift: selectedLift.rawValue, week: currentWeek))
-
-                // The default assistance weight considering the toggle logic
-                let defaultWeight =
-                    ex.defaultWeight > 0
-                    ? ex.defaultWeight
-                    : (ex.allowWeightToggle && workoutState.getAssistUseWeight(lift: selectedLift.rawValue, week: currentWeek)
-                       ? ex.toggledWeight
-                       : 0)
-
                 ForEach(1...3, id: \.self) { setNum in
-                    let currentW = workoutState.getAssistWeight(
-                        lift: selectedLift.rawValue,
-                        week: currentWeek,
-                        set: setNum
-                    ) ?? defaultWeight
-
                     AssistSetRow(
                         setNumber: setNum,
                         defaultWeight: defaultWeight,
                         defaultReps: ex.defaultReps,
-                        hasBarWeight: useWeight,
+                        hasBarWeight: hasBarWeight,
                         usesBarbell: usesBarbell,
                         done: assistSetBinding(setNum),
                         currentWeight: Binding(
                             get: {
-                                workoutState.getAssistWeight(
+                                // Always re-read from state; clamp to implement when barbell.
+                                let saved = workoutState.getAssistWeight(
                                     lift: selectedLift.rawValue,
                                     week: currentWeek,
                                     set: setNum
-                                ) ?? defaultWeight
+                                )
+                                let v = saved ?? defaultWeight
+                                return usesBarbell ? max(v, implementW) : v
                             },
                             set: { newVal in
-                                if abs(newVal - defaultWeight) < 0.1 {
+                                let clamped = usesBarbell ? max(newVal, implementW) : newVal
+                                if abs(clamped - defaultWeight) < 0.1 {
                                     workoutState.setAssistWeight(
                                         lift: selectedLift.rawValue,
                                         week: currentWeek,
@@ -96,7 +127,7 @@ struct AssistanceBlock: View {
                                         lift: selectedLift.rawValue,
                                         week: currentWeek,
                                         set: setNum,
-                                        weight: newVal
+                                        weight: clamped
                                     )
                                 }
                             }
@@ -127,15 +158,33 @@ struct AssistanceBlock: View {
                                 }
                             }
                         ),
-                        perSide: (usesBarbell && useWeight)
-                            ? calculator.plates(target: currentW, barWeight: implementW)
+                        // Plates per side when barbell + weighted
+                        perSide: (usesBarbell && hasBarWeight)
+                            ? calculator.plates(target: {
+                                let saved = workoutState.getAssistWeight(
+                                    lift: selectedLift.rawValue,
+                                    week: currentWeek,
+                                    set: setNum
+                                ) ?? defaultWeight
+                                let v = usesBarbell ? max(saved, implementW) : saved
+                                return v
+                              }(),
+                              barWeight: implementW)
                             : [],
                         roundTo: roundTo,
                         onCheck: { checked in
-                            if checked { timer.start(seconds: timerBBBsec) }
-                        }
+                            if checked && !isWorkoutFinished {
+                                armTimers()
+                                if allowTimerStarts { timer.start(seconds: timerBBBsec) }
+                            }
+                        },
+                        refreshID: refreshID
                     )
                 }
+            } else {
+                Text("Deload week: skip BBB/assistance and add ~30 min easy cardio.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }

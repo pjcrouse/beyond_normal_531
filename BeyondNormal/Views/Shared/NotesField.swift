@@ -17,7 +17,8 @@ struct NotesField: View {
                 .padding(8)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
                 .autocorrectionDisabled()
-                .focused(focused)   // <- bind to the passed-in FocusState
+                .focused(focused)
+                .accessibilityLabel("Workout notes")
         }
     }
 }

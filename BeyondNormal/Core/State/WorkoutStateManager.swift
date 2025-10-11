@@ -7,6 +7,7 @@ final class WorkoutStateManager: ObservableObject {
     
     private let stateKey = "workout_state_v2"
     private let liftsKey = "completed_lifts_by_week"
+    private let finishedKey = "finished_workouts"  // NEW
     private var saveWorkItem: DispatchWorkItem?
     private let queue = DispatchQueue(label: "com.beyondnormal.workout.state", qos: .userInitiated)
     
@@ -183,6 +184,19 @@ final class WorkoutStateManager: ObservableObject {
         saveState()
     }
     
+    // NEW: Mark workout as finished
+    func markWorkoutFinished(lift: String, week: Int) {
+        let key = "\(lift)_w\(week)_finished"
+        state[key] = "true"
+        saveState()
+    }
+    
+    // NEW: Check if workout is finished
+    func isWorkoutFinished(lift: String, week: Int) -> Bool {
+        let key = "\(lift)_w\(week)_finished"
+        return state[key] == "true"
+    }
+    
     func markLiftComplete(_ lift: String, week: Int) {
         var lifts = completedLifts["w\(week)"] ?? []
         if !lifts.contains(lift) {
@@ -221,6 +235,9 @@ final class WorkoutStateManager: ObservableObject {
             state.removeValue(forKey: "\(lift)_w\(week)_bbb\(setNum)_weight")
             state.removeValue(forKey: "\(lift)_w\(week)_bbb\(setNum)_reps")
         }
+        
+        // NEW: Clear finished flag
+        state.removeValue(forKey: "\(lift)_w\(week)_finished")
         
         saveState()
         

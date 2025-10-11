@@ -7,10 +7,16 @@ final class TimerManager: ObservableObject {
     @Published var remaining: Int = 0
     @Published var isRunning: Bool = false
 
+    /// Prevents timers from starting until explicitly armed by ContentView
+    var allowStarts: Bool = false
+
     private var endTime: Date?
-    private var cancellable: AnyCancellable?
+    private var timer: Timer?
+
+    // MARK: - Public API
 
     func start(seconds: Int) {
+        guard allowStarts else { return }
         endTime = Date().addingTimeInterval(TimeInterval(seconds))
         remaining = seconds
         isRunning = true
@@ -21,7 +27,8 @@ final class TimerManager: ObservableObject {
     func pause() {
         isRunning = false
         endTime = nil
-        cancellable?.cancel()
+        timer?.invalidate()
+        timer = nil
         cancelNotification()
     }
 
@@ -29,40 +36,52 @@ final class TimerManager: ObservableObject {
         isRunning = false
         endTime = nil
         remaining = 0
-        cancellable?.cancel()
+        timer?.invalidate()
+        timer = nil
         cancelNotification()
     }
 
+    // MARK: - Private helpers
+
     private func startTicking() {
-        cancellable?.cancel()
-        cancellable = Timer.publish(every: 1, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in self?.tick() }
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.tick()
+        }
     }
 
     private func tick() {
         guard isRunning, let end = endTime else { return }
-        let left = max(0, Int(end.timeIntervalSinceNow.rounded()))
-        remaining = left
-        if left == 0 {
-            isRunning = false
-            endTime = nil
-            cancellable?.cancel()
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        let remainingSeconds = max(0, Int(end.timeIntervalSinceNow.rounded()))
+        remaining = remainingSeconds
+
+        if remainingSeconds == 0 {
+            completeTimer()
         }
+    }
+
+    private func completeTimer() {
+        isRunning = false
+        endTime = nil
+        timer?.invalidate()
+        timer = nil
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 
     private func scheduleNotification(in seconds: Int) {
         let content = UNMutableNotificationContent()
         content.title = "Rest finished"
         content.body = "Time to lift!"
-        content.sound = UNNotificationSound.default
+        content.sound = .default
+
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(seconds), repeats: false)
-        let req = UNNotificationRequest(identifier: "rest-timer", content: content, trigger: trigger)
-        UNUserNotificationCenter.current().add(req)
+        let request = UNNotificationRequest(identifier: "rest-timer", content: content, trigger: trigger)
+
+        UNUserNotificationCenter.current().add(request)
     }
 
     private func cancelNotification() {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["rest-timer"])
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(withIdentifiers: ["rest-timer"])
     }
 }

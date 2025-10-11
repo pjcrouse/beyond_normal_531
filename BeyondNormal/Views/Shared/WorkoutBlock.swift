@@ -23,6 +23,7 @@ struct WorkoutBlock: View {
     // Helpers provided by ContentView so state stays single-source-of-truth
     let est1RM: (Lift, Double) -> Double
     let setBinding: (Int) -> Binding<Bool>
+    let tmFor: (Lift) -> Double
 
     // Live AMRAP text from ContentView
     @Binding var liveRepsText: String
@@ -30,21 +31,28 @@ struct WorkoutBlock: View {
     // STATE SOURCE passed in explicitly
     @ObservedObject var workoutState: WorkoutStateManager
 
+    // Timer gating
+    let allowTimerStarts: Bool
+    let armTimers: () -> Void
+    
+    // NEW: Whether this workout has been marked as finished
+    let isWorkoutFinished: Bool
+
     var body: some View {
         let scheme = program.weekScheme(for: currentWeek)
         let tm     = tmFor(selectedLift)
+        let refreshID = "\(selectedLift.rawValue)-\(currentWeek)"
 
         VStack(alignment: .leading, spacing: 12) {
             header
             liftPicker
             warmupLink(tm: tm, scheme: scheme)
-            mainSets(tm: tm, scheme: scheme)
+            mainSets(tm: tm, scheme: scheme, refreshID: refreshID)
             NotesField(text: $workoutNotes, focused: notesFocused)
             RestTimerCard(timer: timer, regular: timerRegularSec, bbb: timerBBBsec)
-            bbbSets(tm: tm, scheme: scheme)
+            bbbSets(tm: tm, scheme: scheme, refreshID: refreshID)
         }
-        .padding()
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .cardStyle()
         .padding(.horizontal)
     }
 
@@ -84,12 +92,13 @@ struct WorkoutBlock: View {
         } label: {
             Label("Warmup Guidance", systemImage: "flame")
                 .font(.headline)
+                .accessibilityHint("Shows plate math and sets for ramping up.")
         }
         .buttonStyle(.borderedProminent)
     }
 
     @ViewBuilder
-    private func mainSets(tm: Double, scheme: WeekSchemeResult) -> some View {
+    private func mainSets(tm: Double, scheme: WeekSchemeResult, refreshID: String) -> some View {
         let s0 = scheme.main[0], s1 = scheme.main[1], s2 = scheme.main[2]
         let w0 = calculator.round(tm * s0.pct)
         let w1 = calculator.round(tm * s1.pct)
@@ -100,7 +109,13 @@ struct WorkoutBlock: View {
             weight: w0,
             perSide: calculator.plates(target: w0),
             done: setBinding(1),
-            onCheck: { if $0 { timer.start(seconds: timerRegularSec) } }
+            onCheck: { checked in
+                if checked && !isWorkoutFinished {
+                    armTimers()
+                    if allowTimerStarts { timer.start(seconds: timerRegularSec) }
+                }
+            },
+            refreshID: refreshID
         )
 
         SetRow(
@@ -108,7 +123,13 @@ struct WorkoutBlock: View {
             weight: w1,
             perSide: calculator.plates(target: w1),
             done: setBinding(2),
-            onCheck: { if $0 { timer.start(seconds: timerRegularSec) } }
+            onCheck: { checked in
+                if checked && !isWorkoutFinished {
+                    armTimers()
+                    if allowTimerStarts { timer.start(seconds: timerRegularSec) }
+                }
+            },
+            refreshID: refreshID
         )
 
         if s2.amrap {
@@ -119,8 +140,14 @@ struct WorkoutBlock: View {
                 done: setBinding(3),
                 reps: $liveRepsText,
                 est1RM: est1RM(selectedLift, w2),
-                onCheck: { if $0 { timer.start(seconds: timerRegularSec) } },
-                focus: amrapFocused
+                onCheck: { checked in
+                    if checked && !isWorkoutFinished {
+                        armTimers()
+                        if allowTimerStarts { timer.start(seconds: timerRegularSec) }
+                    }
+                },
+                focus: amrapFocused,
+                refreshID: refreshID
             )
         } else {
             SetRow(
@@ -128,7 +155,13 @@ struct WorkoutBlock: View {
                 weight: w2,
                 perSide: calculator.plates(target: w2),
                 done: setBinding(3),
-                onCheck: { if $0 { timer.start(seconds: timerRegularSec) } }
+                onCheck: { checked in
+                    if checked && !isWorkoutFinished {
+                        armTimers()
+                        if allowTimerStarts { timer.start(seconds: timerRegularSec) }
+                    }
+                },
+                refreshID: refreshID
             )
             Text("Deload week: skip BBB/assistance and add 10–20 min easy cardio.")
                 .font(.caption)
@@ -137,7 +170,7 @@ struct WorkoutBlock: View {
     }
 
     @ViewBuilder
-    private func bbbSets(tm: Double, scheme: WeekSchemeResult) -> some View {
+    private func bbbSets(tm: Double, scheme: WeekSchemeResult, refreshID: String) -> some View {
         if scheme.showBBB {
             Divider().padding(.vertical, 4)
             let defaultBBBWeight = calculator.round(tm * bbbPct)
@@ -216,7 +249,13 @@ struct WorkoutBlock: View {
                             ) ?? defaultBBBWeight
                           ),
                     roundTo: roundTo,
-                    onCheck: { if $0 { timer.start(seconds: timerBBBsec) } }
+                    onCheck: { checked in
+                        if checked && !isWorkoutFinished {
+                            armTimers()
+                            if allowTimerStarts { timer.start(seconds: timerBBBsec) }
+                        }
+                    },
+                    refreshID: refreshID
                 )
             }
         } else {
@@ -225,22 +264,4 @@ struct WorkoutBlock: View {
                 .foregroundStyle(.secondary)
         }
     }
-
-    // MARK: - Local helpers (read TMs from AppStorage)
-    private func tmFor(_ lift: Lift) -> Double {
-        switch lift {
-        case .squat: return AppStorageBacked.tmSquat
-        case .bench: return AppStorageBacked.tmBench
-        case .deadlift: return AppStorageBacked.tmDeadlift
-        case .row: return AppStorageBacked.tmRow
-        }
-    }
-}
-
-// Tiny shim so WorkoutBlock can read TM without duplicating state.
-private enum AppStorageBacked {
-    @AppStorage("tm_squat")    static var tmSquat: Double = 315
-    @AppStorage("tm_bench")    static var tmBench: Double = 225
-    @AppStorage("tm_deadlift") static var tmDeadlift: Double = 405
-    @AppStorage("tm_row")      static var tmRow: Double = 185
 }
