@@ -27,16 +27,22 @@ struct AssistanceBlock: View {
     
     /// NEW: Whether this workout has been marked as finished
     let isWorkoutFinished: Bool
+    
+    // NEW: access to training maxes
+    let tmFor: (Lift) -> Double
 
     var body: some View {
         let scheme = program.weekScheme(for: currentWeek)
         let ex = assistanceFor(selectedLift)
+        let isSSBGM = (ex.id == "ssb_gm")
+        let isDBRDL = (selectedLift == .deadlift && ex.id == "db_rdl")
+        let deadliftTM = tmFor(.deadlift)
         let refreshID = "\(selectedLift.rawValue)-\(currentWeek)"
 
         // Which assistance use a barbell (plates + implement)?
         // Include triceps_ext so Lying Triceps Extension uses the EZ-bar implement.
         let barAssistanceIDs: Set<String> = [
-            "front_squat", "paused_squat", "close_grip", "triceps_ext"
+            "front_squat", "paused_squat", "close_grip", "triceps_ext", "ssb_gm"
         ]
         let usesBarbell = barAssistanceIDs.contains(ex.id)
 
@@ -57,12 +63,14 @@ struct AssistanceBlock: View {
                     return ex.defaultWeight > 0
                 }()
 
-                // Default weight:
-                // 1) Barbell: prefer legacy per-lift default if present (e.g. 65 for bench),
-                //    then clamp to at least the implement weight (e.g., 25 for EZ-bar).
-                // 2) Non-barbell: follow toggle/default rules.
                 let defaultWeight: Double = {
-                    if usesBarbell {
+                    if isDBRDL {
+                        return Double(recommendedDBRDLPerHand(deadliftTM: deadliftTM, roundTo: roundTo))
+                    } else if isSSBGM {
+                        let dlTM = tmFor(.deadlift)
+                        let w = recommendedSSBGMWeight(deadliftTM: dlTM, barWeight: implementW, roundTo: roundTo)
+                        return Double(w)
+                    } else if usesBarbell {
                         let legacy = legacyAssistDefault(selectedLift)
                         let base = legacy ?? (ex.defaultWeight > 0 ? ex.defaultWeight : implementW)
                         return max(base, implementW)
@@ -76,12 +84,14 @@ struct AssistanceBlock: View {
                 }()
 
                 // Only show the dumbbell toggle for non-barbell exercises that allow it
-                let showToggle = ex.allowWeightToggle && !usesBarbell
+                let showToggle = ex.allowWeightToggle && !usesBarbell && !isDBRDL
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Assistance — \(ex.name)")
                         .font(.headline)
 
+                    // Only show the dumbbell toggle for non-barbell exercises that allow it,
+                    // and never for DB RDL (we always want it weighted) or SSB GM (barbell).
                     if showToggle {
                         Toggle(isOn: Binding(
                             get: { workoutState.getAssistUseWeight(lift: selectedLift.rawValue, week: currentWeek) },
@@ -91,6 +101,23 @@ struct AssistanceBlock: View {
                                 .font(.subheadline)
                         }
                         .toggleStyle(.switch)
+                    }
+
+                    // ⬇️ NEW: TM-based hint captions
+                    if isSSBGM {
+                        let dlTM = tmFor(.deadlift)
+                        let suggest = recommendedSSBGMWeight(deadliftTM: dlTM, barWeight: implementW, roundTo: roundTo)
+                        Text("Suggested: \(suggest) lb total · 3×8–10")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    if isDBRDL {
+                        let dlTM = tmFor(.deadlift)
+                        let suggest = recommendedDBRDLPerHand(deadliftTM: dlTM, roundTo: roundTo)
+                        Text("Suggested: \(suggest) lb per hand · 4×8–12")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                 }
 
