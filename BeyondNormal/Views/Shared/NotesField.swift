@@ -2,7 +2,7 @@ import SwiftUI
 
 struct NotesField: View {
     @Binding var text: String
-    @FocusState var focused: Bool
+    var focused: FocusState<Bool>.Binding   // <- receive a binding
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -17,7 +17,8 @@ struct NotesField: View {
                 .padding(8)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
                 .autocorrectionDisabled()
-                .focused($focused)
+                .focused(focused)
+                .accessibilityLabel("Workout notes")
         }
     }
 }
