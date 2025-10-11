@@ -25,7 +25,8 @@ final class ImplementWeights: ObservableObject {
         "front_squat": 45,
         "paused_squat": 45,
         "close_grip": 45,
-        "triceps_ext": 25 // typical EZ-bar
+        "triceps_ext": 25, // typical EZ-bar
+        "ssb_gm": 75       // SSB Good Morning uses 75 lb bar
     ]
 
     func load() {
