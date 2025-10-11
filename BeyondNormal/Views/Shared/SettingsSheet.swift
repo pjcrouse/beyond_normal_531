@@ -189,14 +189,14 @@ struct SettingsSheet: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") {
-                        if let v = Double(tmpSquat)    { tmSquat = v }
-                        if let v = Double(tmpBench)    { tmBench = v }
+                        if let v = Double(tmpSquat) { tmSquat = v }
+                        if let v = Double(tmpBench) { tmBench = v }
                         if let v = Double(tmpDeadlift) { tmDeadlift = v }
-                        if let v = Double(tmpRow)      { tmRow = v }
-                        if let v = Double(tmpBarWeight){ barWeight = max(1,   min(v, 200)) }
-                        if let v = Double(tmpRoundTo)  { roundTo   = max(0.5, min(v, 100)) }
+                        if let v = Double(tmpRow) { tmRow = v }
+                        if let v = Double(tmpBarWeight) { barWeight = max(1, min(v, 200)) }
+                        if let v = Double(tmpRoundTo) { roundTo   = max(0.5, min(v, 100)) }
                         if let v = Int(tmpTimerRegular) { timerRegularSec = max(1, v) }
-                        if let v = Int(tmpTimerBBB)     { timerBBBsec     = max(1, v) }
+                        if let v = Int(tmpTimerBBB) { timerBBBsec     = max(1, v) }
                         dismiss()
                     }.bold()
                 }

@@ -15,12 +15,12 @@ struct RestTimerCard: View {
             }
 
             Text(timer.remaining > 0 ? mmss(timer.remaining)
-                 : "Ready (\(mmss(regular)) / \(mmss(bbb)))")
-            .font(.system(size: 34, weight: .bold, design: .rounded))
+                    : "Ready (\(mmss(regular)) / \(mmss(bbb)))")
+                .font(.system(size: 34, weight: .bold, design: .rounded))
 
             HStack(spacing: 12) {
-                Button { timer.start(seconds: regular) }  label: { Label("Start Regular", systemImage: "timer") }
-                Button { timer.start(seconds: bbb) }      label: { Label("Start BBB",     systemImage: "timer") }
+                Button { timer.start(seconds: regular) } label: { Label("Start Regular", systemImage: "timer") }
+                Button { timer.start(seconds: bbb) } label: { Label("Start BBB", systemImage: "timer") }
             }
             .buttonStyle(.bordered)
 

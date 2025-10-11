@@ -34,7 +34,7 @@ struct WorkoutBlock: View {
     // Timer gating
     let allowTimerStarts: Bool
     let armTimers: () -> Void
-    
+
     // NEW: Whether this workout has been marked as finished
     let isWorkoutFinished: Bool
 
@@ -176,9 +176,9 @@ struct WorkoutBlock: View {
             let defaultBBBWeight = calculator.round(tm * bbbPct)
 
             Text(selectedLift == .row
-                 ? "Assistance — Lat Pulldown 5×10 @ \(Int(bbbPct * 100))% TM (Row)"
-                 : "Assistance — BBB 5×10 @ \(Int(bbbPct * 100))% TM")
-            .font(.headline)
+                    ? "Assistance — Lat Pulldown 5×10 @ \(Int(bbbPct * 100))% TM (Row)"
+                    : "Assistance — BBB 5×10 @ \(Int(bbbPct * 100))% TM")
+                .font(.headline)
 
             ForEach(1...5, id: \.self) { bbbSetNum in
                 let setNum = bbbSetNum + 3 // Sets 4–8 in main tracking
@@ -247,7 +247,7 @@ struct WorkoutBlock: View {
                                 week: currentWeek,
                                 set: bbbSetNum
                             ) ?? defaultBBBWeight
-                          ),
+                        ),
                     roundTo: roundTo,
                     onCheck: { checked in
                         if checked && !isWorkoutFinished {

@@ -42,7 +42,7 @@ extension AssistanceExercise {
               defaultWeight: 0, defaultReps: 12,
               allowWeightToggle: true, toggledWeight: 25,
               usesImpliedImplements: false, category: .legs),
-        
+
         // PUSH (bench)
         .init(id: "triceps_ext", name: "Lying Triceps Extension (EZ)",
               defaultWeight: 25, defaultReps: 12,
@@ -56,7 +56,7 @@ extension AssistanceExercise {
               defaultWeight: 95, defaultReps: 8,
               allowWeightToggle: false, toggledWeight: 0,
               usesImpliedImplements: false, category: .push),
-        
+
         // PULL (row)
         .init(id: "spider_curls", name: "Spider Curls (DB)",
               defaultWeight: 30, defaultReps: 12,
@@ -70,7 +70,7 @@ extension AssistanceExercise {
               defaultWeight: 25, defaultReps: 15,
               allowWeightToggle: false, toggledWeight: 0,
               usesImpliedImplements: true, category: .pull),
-        
+
         // CORE (deadlift/back)
         .init(id: "back_ext", name: "Back Extension",
               defaultWeight: 0, defaultReps: 12,
@@ -91,9 +91,9 @@ extension AssistanceExercise {
         .init(id: "ssb_gm", name: "SSB Good Morning",
               defaultWeight: 95, defaultReps: 8,
               allowWeightToggle: false, toggledWeight: 0,
-              usesImpliedImplements: false, category: .core),
+              usesImpliedImplements: false, category: .core)
     ]
-    
+
     static func byID(_ id: String) -> AssistanceExercise? {
         catalog.first { $0.id == id }
     }

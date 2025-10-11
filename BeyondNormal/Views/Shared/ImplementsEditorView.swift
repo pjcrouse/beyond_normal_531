@@ -5,7 +5,7 @@ struct ImplementsEditorView: View {
     @State private var q: String = ""
 
     // Inline editing state
-    @State private var editingID: String? = nil
+    @State private var editingID: String?
     @State private var editingText: String = ""
     @FocusState private var editingFocused: Bool
 
@@ -16,11 +16,11 @@ struct ImplementsEditorView: View {
 
     // Which implements are editable
     private var items: [(id: String, name: String)] {
-        let mains: [(String,String)] = [
-            ("SQ","Squat (Main)"),
-            ("BP","Bench (Main)"),
-            ("DL","Deadlift (Main)"),
-            ("RW","Row (Main)")
+        let mains: [(String, String)] = [
+            ("SQ", "Squat (Main)"),
+            ("BP", "Bench (Main)"),
+            ("DL", "Deadlift (Main)"),
+            ("RW", "Row (Main)")
         ]
         let bars = AssistanceExercise.catalog
             .filter { ["front_squat", "paused_squat", "close_grip", "triceps_ext"].contains($0.id) }
@@ -33,71 +33,71 @@ struct ImplementsEditorView: View {
     var body: some View {
         List {
             Section(footer: Text("Changes save automatically.")
-                .font(.caption)
-                .foregroundStyle(.secondary)) {
-                    ForEach(items, id: \.id) { item in
-                        let id = item.id
-                        let current = impl.weight(for: id)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)) {
+                ForEach(items, id: \.id) { item in
+                    let id = item.id
+                    let current = impl.weight(for: id)
 
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text(item.name)
-                                Spacer()
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(item.name)
+                            Spacer()
 
-                                if editingID == id {
-                                    // Inline numeric field (fixed width so it never collapses to 0)
-                                    TextField("", text: $editingText)
-                                        .keyboardType(isDecimalAllowed ? .decimalPad : .numberPad)
-                                        .textFieldStyle(.roundedBorder)
-                                        .frame(width: 96)
-                                        .monospacedDigit()
-                                        .focused($editingFocused)
-                                        .submitLabel(.done)
-                                        .onSubmit { commitInlineEdit(for: id) }
-                                        .onChange(of: editingText) { _, t in
-                                            let filtered = filteredNumericString(t, allowDecimal: isDecimalAllowed)
-                                            if filtered != t { editingText = filtered }
-                                        }
-                                } else {
-                                    // Current value (tap to edit)
-                                    Button {
-                                        editingText = displayString(for: current, decimals: isDecimalAllowed)
-                                        editingID = id
-                                    } label: {
-                                        Text("\(displayString(for: current, decimals: isDecimalAllowed)) lb")
-                                            .font(.callout)
-                                            .monospacedDigit()
-                                            .foregroundStyle(.secondary)
+                            if editingID == id {
+                                // Inline numeric field (fixed width so it never collapses to 0)
+                                TextField("", text: $editingText)
+                                    .keyboardType(isDecimalAllowed ? .decimalPad : .numberPad)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(width: 96)
+                                    .monospacedDigit()
+                                    .focused($editingFocused)
+                                    .submitLabel(.done)
+                                    .onSubmit { commitInlineEdit(for: id) }
+                                    .onChange(of: editingText) { _, t in
+                                        let filtered = filteredNumericString(t, allowDecimal: isDecimalAllowed)
+                                        if filtered != t { editingText = filtered }
                                     }
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel("\(item.name) weight, \(Int(current)) pounds, tap to edit")
-                                }
-                            }
-
-                            // Stepper for small nudges
-                            Stepper(value: Binding(
-                                get: { Int(impl.weight(for: id)) },
-                                set: { impl.setWeight(clamp(Double($0)), for: id) }
-                            ), in: Int(minW)...Int(maxW)) {
-                                Text("Adjust")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            // Per-row reset
-                            if Int(current) != Int(defaultFor(id)) {
+                            } else {
+                                // Current value (tap to edit)
                                 Button {
-                                    impl.setWeight(defaultFor(id), for: id)
+                                    editingText = displayString(for: current, decimals: isDecimalAllowed)
+                                    editingID = id
                                 } label: {
-                                    Label("Reset to default (\(Int(defaultFor(id))) lb)", systemImage: "arrow.counterclockwise")
+                                    Text("\(displayString(for: current, decimals: isDecimalAllowed)) lb")
+                                        .font(.callout)
+                                        .monospacedDigit()
+                                        .foregroundStyle(.secondary)
                                 }
-                                .buttonStyle(.borderless)
-                                .font(.caption)
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("\(item.name) weight, \(Int(current)) pounds, tap to edit")
                             }
                         }
-                        .padding(.vertical, 4)
+
+                        // Stepper for small nudges
+                        Stepper(value: Binding(
+                            get: { Int(impl.weight(for: id)) },
+                            set: { impl.setWeight(clamp(Double($0)), for: id) }
+                        ), in: Int(minW)...Int(maxW)) {
+                            Text("Adjust")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        // Per-row reset
+                        if Int(current) != Int(defaultFor(id)) {
+                            Button {
+                                impl.setWeight(defaultFor(id), for: id)
+                            } label: {
+                                Label("Reset to default (\(Int(defaultFor(id))) lb)", systemImage: "arrow.counterclockwise")
+                            }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
+                        }
                     }
+                    .padding(.vertical, 4)
                 }
+            }
 
             Section {
                 Button {
@@ -153,8 +153,8 @@ struct ImplementsEditorView: View {
 
     private func displayString(for x: Double, decimals: Bool) -> String {
         decimals
-        ? String(format: x.rounded() == x ? "%.0f" : "%.1f", x)
-        : String(format: "%.0f", x)
+            ? String(format: x.rounded() == x ? "%.0f" : "%.1f", x)
+            : String(format: "%.0f", x)
     }
 
     private func filteredNumericString(_ s: String, allowDecimal: Bool) -> String {
@@ -183,8 +183,8 @@ struct ImplementsEditorView: View {
     }
 
     private func resignKeyboard() {
-#if canImport(UIKit)
+        #if canImport(UIKit)
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-#endif
+        #endif
     }
 }

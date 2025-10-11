@@ -24,10 +24,10 @@ struct AssistanceBlock: View {
     /// Timer gating: allow + explicit arming (prevents auto-start on app launch)
     let allowTimerStarts: Bool
     let armTimers: () -> Void
-    
+
     /// NEW: Whether this workout has been marked as finished
     let isWorkoutFinished: Bool
-    
+
     // NEW: access to training maxes
     let tmFor: (Lift) -> Double
 
@@ -195,8 +195,8 @@ struct AssistanceBlock: View {
                                 ) ?? defaultWeight
                                 let v = usesBarbell ? max(saved, implementW) : saved
                                 return v
-                              }(),
-                              barWeight: implementW)
+                            }(),
+                            barWeight: implementW)
                             : [],
                         roundTo: roundTo,
                         onCheck: { checked in
