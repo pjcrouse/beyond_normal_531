@@ -16,12 +16,12 @@ struct RestTimerView: View {
             }
 
             Text(timer.remaining > 0 ? mmss(timer.remaining)
-                                     : "Ready (\(mmss(regularSec)) / \(mmss(bbbSec)))")
+                    : "Ready (\(mmss(regularSec)) / \(mmss(bbbSec)))")
                 .font(.system(size: 34, weight: .bold, design: .rounded))
 
             HStack(spacing: 12) {
-                Button { timer.start(seconds: regularSec) }  label: { Label("Start Regular", systemImage: "timer") }
-                Button { timer.start(seconds: bbbSec)     }  label: { Label("Start BBB",     systemImage: "timer") }
+                Button { timer.start(seconds: regularSec) } label: { Label("Start Regular", systemImage: "timer") }
+                Button { timer.start(seconds: bbbSec)      } label: { Label("Start BBB", systemImage: "timer") }
             }
             .buttonStyle(.bordered)
 

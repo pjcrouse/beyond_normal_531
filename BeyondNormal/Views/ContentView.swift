@@ -56,6 +56,9 @@ struct ContentView: View {
     // Gate that views check before calling timer.start(...)
     @State private var allowTimerStarts = false
 
+    // Library for assistance lookup (still needed for selected exercise resolution)
+    @EnvironmentObject private var assistanceLibrary: AssistanceLibrary
+
     private let program = ProgramEngine()
 
     private var calculator: PlateCalculator {
@@ -113,7 +116,6 @@ struct ContentView: View {
                     Button { showGuide = true } label: { Image(systemName: "questionmark.circle") }
                         .accessibilityLabel("User Guide")
                 }
-
                 // Keyboard toolbar - Done button
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
@@ -338,7 +340,17 @@ struct ContentView: View {
         case .deadlift: id = assistDeadliftID
         case .row:      id = assistRowID
         }
-        return AssistanceExercise.byID(id) ?? AssistanceExercise.catalog.first!
+
+        // 1) Try user-created first
+        if let fromUser = assistanceLibrary.userCreated.first(where: { $0.id == id }) {
+            return fromUser
+        }
+        // 2) Fall back to built-in catalog
+        if let fromBuiltIn = AssistanceExercise.byID(id) {
+            return fromBuiltIn
+        }
+        // 3) Absolute fallback: the first catalog item (should never happen in practice)
+        return AssistanceExercise.catalog.first!
     }
 
     private func tmFor(_ lift: Lift) -> Double {

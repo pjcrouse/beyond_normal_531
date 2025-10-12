@@ -58,7 +58,7 @@ struct UserGuideView: View {
                         Tip("Implements editor", "Set per-exercise bar/EZ weights for precise plate math.")
                     }
                 }
-                
+
                 // AMRAP
                 GuideCard {
                     VStack(alignment: .leading, spacing: 12) {
@@ -87,7 +87,7 @@ struct UserGuideView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                
+
                 GuideCard {
                     VStack(alignment: .leading, spacing: 12) {
                         SectionHeader("Deload Week", systemImage: "leaf.arrow.circlepath")

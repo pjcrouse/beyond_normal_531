@@ -12,7 +12,8 @@ public struct SetRow: View {
 
     @State private var lastKnownDone: Bool = false
 
-    public init(label: String, weight: Double, perSide: [Double], done: Binding<Bool>, onCheck: ((Bool) -> Void)? = nil, refreshID: String = "") {
+    public init(label: String, weight: Double, perSide: [Double], done: Binding<Bool>,
+                onCheck: ((Bool) -> Void)? = nil, refreshID: String = "") {
         self.label = label
         self.weight = weight
         self.perSide = perSide
@@ -39,7 +40,7 @@ public struct SetRow: View {
                 lastKnownDone = new
                 return
             }
-            
+
             if !old && new {
                 onCheck?(true)
             }
@@ -125,7 +126,7 @@ public struct AMRAPRow: View {
                 lastKnownDone = new
                 return
             }
-            
+
             if !old && new {
                 onCheck?(true)
             }
@@ -213,7 +214,7 @@ public struct BBBSetRow: View {
                 lastKnownDone = new
                 return
             }
-            
+
             if !old && new {
                 onCheck?(true)
             }
@@ -315,7 +316,7 @@ public struct AssistSetRow: View {
                 lastKnownDone = new
                 return
             }
-            
+
             if !old && new {
                 onCheck?(true)
             }
