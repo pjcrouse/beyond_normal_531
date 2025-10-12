@@ -9,9 +9,11 @@ import SwiftUI
 
 @main
 struct BeyondNormalApp: App {
+    @StateObject private var assistanceLibrary = AssistanceLibrary.shared
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(assistanceLibrary)
         }
     }
 }

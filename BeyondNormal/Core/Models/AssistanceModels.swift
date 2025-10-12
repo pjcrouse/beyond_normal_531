@@ -4,15 +4,84 @@ enum ExerciseCategory: String, Codable, CaseIterable {
     case push, pull, legs, core
 }
 
+// Attribution for community/sharing
+enum AssistanceSource: Codable, Equatable, Hashable {
+    case builtIn
+    case userCreated(author: String?)
+    case imported(packId: String, author: String?)
+}
+
 struct AssistanceExercise: Identifiable, Codable, Hashable {
+    // EXISTING FIELDS (unchanged)
     let id: String
-    let name: String
-    let defaultWeight: Double        // 0 = bodyweight
-    let defaultReps: Int
-    let allowWeightToggle: Bool      // e.g. dips, split squats with DBs
-    let toggledWeight: Double        // default DB weight when toggled
-    let usesImpliedImplements: Bool  // cosmetic label (EZ bar, machine)
-    let category: ExerciseCategory
+    var name: String
+    var defaultWeight: Double        // 0 = bodyweight
+    var defaultReps: Int
+    var allowWeightToggle: Bool      // e.g. dips, split squats with DBs
+    var toggledWeight: Double        // default DB weight when toggled
+    var usesImpliedImplements: Bool  // cosmetic label (EZ bar, machine)
+    var category: ExerciseCategory
+
+    // NEW FIELDS (future-proof for filtering & community)
+    var areas: Set<FocusArea> = []           // e.g., [.deadlift, .squat]
+    var tags: Set<AssistanceTag> = []        // e.g., [.hamstrings, .glutes]
+    var source: AssistanceSource = .builtIn  // built-in unless user creates/imports
+    var createdAt: Date = Date()
+    var version: Int = 1
+
+    // ---- Initializers ----
+
+    /// 1) Back-compat: exact signature you already use in `catalog`.
+    ///    This lets your existing `catalog` compile with zero edits.
+    init(id: String,
+         name: String,
+         defaultWeight: Double,
+         defaultReps: Int,
+         allowWeightToggle: Bool,
+         toggledWeight: Double,
+         usesImpliedImplements: Bool,
+         category: ExerciseCategory) {
+        self.id = id
+        self.name = name
+        self.defaultWeight = defaultWeight
+        self.defaultReps = defaultReps
+        self.allowWeightToggle = allowWeightToggle
+        self.toggledWeight = toggledWeight
+        self.usesImpliedImplements = usesImpliedImplements
+        self.category = category
+        self.areas = []                 // can be filled later
+        self.tags = []                  // can be filled later
+        self.source = .builtIn
+        self.createdAt = Date()
+        self.version = 1
+    }
+
+    /// 2) Creator-friendly: use this when the user adds a custom exercise.
+    init(id: String,
+         name: String,
+         defaultWeight: Double,
+         defaultReps: Int,
+         allowWeightToggle: Bool,
+         toggledWeight: Double,
+         usesImpliedImplements: Bool,
+         category: ExerciseCategory,
+         areas: Set<FocusArea>,
+         tags: Set<AssistanceTag>,
+         authorDisplayName: String?) {
+        self.id = id
+        self.name = name
+        self.defaultWeight = defaultWeight
+        self.defaultReps = defaultReps
+        self.allowWeightToggle = allowWeightToggle
+        self.toggledWeight = toggledWeight
+        self.usesImpliedImplements = usesImpliedImplements
+        self.category = category
+        self.areas = areas
+        self.tags = tags
+        self.source = .userCreated(author: authorDisplayName)
+        self.createdAt = Date()
+        self.version = 1
+    }
 }
 
 extension AssistanceExercise {
