@@ -12,6 +12,7 @@ struct SettingsSheet: View {
     @Binding var timerBBBsec: Int
     @Binding var tmProgStyleRaw: String
     @Binding var autoAdvanceWeek: Bool
+    @Binding var oneRMFormulaRaw: String
 
     // Assistance exercise selections
     @Binding var assistSquatID: String
@@ -89,6 +90,14 @@ struct SettingsSheet: View {
                     Text("Tip: 240s = 4:00, 180s = 3:00")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+                
+                Section(header: Text("1RM Formula")) {
+                    Picker("Estimation Formula", selection: $oneRMFormulaRaw) {
+                        Text("Epley").tag("epley")
+                        Text("Wendler").tag("wendler")
+                    }
+                    .pickerStyle(.segmented)
                 }
 
                 Section("TM Progression Style") {

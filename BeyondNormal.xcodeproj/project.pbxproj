@@ -6,8 +6,19 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		F8DC5BC32E9D24FF00603608 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F831DBFA2E946F8000293177 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F831DC012E946F8000293177;
+			remoteInfo = BeyondNormal;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		F831DC022E946F8000293177 /* BeyondNormal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BeyondNormal.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F8DC5BBF2E9D24FF00603608 /* BeyondNormalTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BeyondNormalTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -16,10 +27,22 @@
 			path = BeyondNormal;
 			sourceTree = "<group>";
 		};
+		F8DC5BC02E9D24FF00603608 /* BeyondNormalTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = BeyondNormalTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		F831DBFF2E946F8000293177 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F8DC5BBC2E9D24FF00603608 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -33,6 +56,7 @@
 			isa = PBXGroup;
 			children = (
 				F831DC042E946F8000293177 /* BeyondNormal */,
+				F8DC5BC02E9D24FF00603608 /* BeyondNormalTests */,
 				F831DC032E946F8000293177 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +65,7 @@
 			isa = PBXGroup;
 			children = (
 				F831DC022E946F8000293177 /* BeyondNormal.app */,
+				F8DC5BBF2E9D24FF00603608 /* BeyondNormalTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,6 +95,29 @@
 			productReference = F831DC022E946F8000293177 /* BeyondNormal.app */;
 			productType = "com.apple.product-type.application";
 		};
+		F8DC5BBE2E9D24FF00603608 /* BeyondNormalTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F8DC5BC52E9D24FF00603608 /* Build configuration list for PBXNativeTarget "BeyondNormalTests" */;
+			buildPhases = (
+				F8DC5BBB2E9D24FF00603608 /* Sources */,
+				F8DC5BBC2E9D24FF00603608 /* Frameworks */,
+				F8DC5BBD2E9D24FF00603608 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				F8DC5BC42E9D24FF00603608 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				F8DC5BC02E9D24FF00603608 /* BeyondNormalTests */,
+			);
+			name = BeyondNormalTests;
+			packageProductDependencies = (
+			);
+			productName = BeyondNormalTests;
+			productReference = F8DC5BBF2E9D24FF00603608 /* BeyondNormalTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -82,6 +130,10 @@
 				TargetAttributes = {
 					F831DC012E946F8000293177 = {
 						CreatedOnToolsVersion = 16.2;
+					};
+					F8DC5BBE2E9D24FF00603608 = {
+						CreatedOnToolsVersion = 16.2;
+						TestTargetID = F831DC012E946F8000293177;
 					};
 				};
 			};
@@ -100,12 +152,20 @@
 			projectRoot = "";
 			targets = (
 				F831DC012E946F8000293177 /* BeyondNormal */,
+				F8DC5BBE2E9D24FF00603608 /* BeyondNormalTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		F831DC002E946F8000293177 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F8DC5BBD2E9D24FF00603608 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +182,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F8DC5BBB2E9D24FF00603608 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		F8DC5BC42E9D24FF00603608 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F831DC012E946F8000293177 /* BeyondNormal */;
+			targetProxy = F8DC5BC32E9D24FF00603608 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		F831DC0E2E946F8200293177 /* Debug */ = {
@@ -304,6 +379,42 @@
 			};
 			name = Release;
 		};
+		F8DC5BC62E9D24FF00603608 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = SAWXG389ZV;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = BeyondNormal.BeyondNormalTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/BeyondNormal.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/BeyondNormal";
+			};
+			name = Debug;
+		};
+		F8DC5BC72E9D24FF00603608 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = SAWXG389ZV;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = BeyondNormal.BeyondNormalTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/BeyondNormal.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/BeyondNormal";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -321,6 +432,15 @@
 			buildConfigurations = (
 				F831DC112E946F8200293177 /* Debug */,
 				F831DC122E946F8200293177 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F8DC5BC52E9D24FF00603608 /* Build configuration list for PBXNativeTarget "BeyondNormalTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F8DC5BC62E9D24FF00603608 /* Debug */,
+				F8DC5BC72E9D24FF00603608 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
