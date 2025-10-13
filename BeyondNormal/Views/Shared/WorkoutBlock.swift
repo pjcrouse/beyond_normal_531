@@ -21,7 +21,8 @@ struct WorkoutBlock: View {
     let timerBBBsec: Int
 
     // Helpers provided by ContentView so state stays single-source-of-truth
-    let est1RM: (Lift, Double) -> Double
+    // NOTE: now returns AmrapEstimate (value + note) instead of Double
+    let est1RM: (Lift, Double) -> AmrapEstimate
     let setBinding: (Int) -> Binding<Bool>
     let tmFor: (Lift) -> Double
 
@@ -133,13 +134,29 @@ struct WorkoutBlock: View {
         )
 
         if s2.amrap {
+            // Ask for the full estimate (value + note)
+            let r = est1RM(selectedLift, w2)
+            let capText: String? = {
+                switch r.note {
+                case .none:
+                    return nil
+                case .lowConfidence:
+                    return "Estimate low confidence (high reps)."
+                case .capped(let cap):
+                    return "Estimated using \(cap) reps (capped)."
+                case .invalidTooManyReps(let actual):
+                    return "Too many reps (\(actual)) to estimate 1RM."
+                }
+            }()
+
             AMRAPRow(
                 label: "\(Int(s2.pct * 100))% × \(s2.reps)+",
                 weight: w2,
                 perSide: calculator.plates(target: w2),
                 done: setBinding(3),
                 reps: $liveRepsText,
-                est1RM: est1RM(selectedLift, w2),
+                est1RM: r.e1RM,
+                capNote: capText,
                 onCheck: { checked in
                     if checked && !isWorkoutFinished {
                         armTimers()

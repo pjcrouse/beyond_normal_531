@@ -62,19 +62,21 @@ public struct AMRAPRow: View {
     @Binding public var done: Bool
     @Binding public var reps: String
     public let est1RM: Double
+    public let capNote: String?
     public var onCheck: ((Bool) -> Void)?
     public var focus: FocusState<Bool>.Binding
     public let refreshID: String
 
     @State private var lastKnownDone: Bool = false
 
-    public init(label: String, weight: Double, perSide: [Double], done: Binding<Bool>, reps: Binding<String>, est1RM: Double, onCheck: ((Bool) -> Void)? = nil, focus: FocusState<Bool>.Binding, refreshID: String = "") {
+    public init(label: String, weight: Double, perSide: [Double], done: Binding<Bool>, reps: Binding<String>, est1RM: Double, capNote: String? = nil, onCheck: ((Bool) -> Void)? = nil, focus: FocusState<Bool>.Binding, refreshID: String = "") {
         self.label = label
         self.weight = weight
         self.perSide = perSide
         self._done = done
         self._reps = reps
         self.est1RM = est1RM
+        self.capNote = capNote
         self.onCheck = onCheck
         self.focus = focus
         self.refreshID = refreshID
@@ -113,11 +115,23 @@ public struct AMRAPRow: View {
                         }
                     }
 
-                if est1RM > 0 {
+                let hasNote = (capNote?.isEmpty == false)
+
+                if est1RM > 0 || hasNote {
                     Spacer()
-                    Text("Est 1RM ≈ \(Int(est1RM)) lb")
-                        .font(.subheadline)
-                        .foregroundStyle(.blue)
+                    VStack(alignment: .trailing, spacing: 2) {
+                        if est1RM > 0 {
+                            Text("Est 1RM ≈ \(Int(est1RM)) lb")
+                                .font(.subheadline)
+                                .foregroundStyle(.blue)
+                        }
+                        if let note = capNote, !note.isEmpty {
+                            Text(note)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                 }
             }
         }

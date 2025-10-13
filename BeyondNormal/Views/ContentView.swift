@@ -34,6 +34,9 @@ struct ContentView: View {
     @AppStorage("assist_bench_id")    private var assistBenchID: String = "triceps_ext"
     @AppStorage("assist_deadlift_id") private var assistDeadliftID: String = "back_ext"
     @AppStorage("assist_row_id")      private var assistRowID: String = "spider_curls"
+    
+    // 1 Rep Max Formula
+    @AppStorage("one_rm_formula") private var oneRMFormulaRaw: String = "epley"
 
     @StateObject private var workoutState = WorkoutStateManager()
     @StateObject private var timer = TimerManager()
@@ -59,6 +62,13 @@ struct ContentView: View {
     // Library for assistance lookup (still needed for selected exercise resolution)
     @EnvironmentObject private var assistanceLibrary: AssistanceLibrary
 
+    private var oneRMFormula: OneRepMaxFormula {
+        switch oneRMFormulaRaw.lowercased() {
+        case "wendler": return .wendler
+        default:        return .epley
+        }
+    }
+    
     private let program = ProgramEngine()
 
     private var calculator: PlateCalculator {
@@ -139,6 +149,7 @@ struct ContentView: View {
                 timerBBBsec: $timerBBBsec,
                 tmProgStyleRaw: $tmProgStyleRaw,
                 autoAdvanceWeek: $autoAdvanceWeek,
+                oneRMFormulaRaw: $oneRMFormulaRaw,
                 assistSquatID: $assistSquatID,
                 assistBenchID: $assistBenchID,
                 assistDeadliftID: $assistDeadliftID,
@@ -233,7 +244,18 @@ struct ContentView: View {
                 bbbPct: bbbPct,
                 timerRegularSec: timerRegularSec,
                 timerBBBsec: timerBBBsec,
-                est1RM: { lift, w in est1RM(for: lift, weight: w) },
+                est1RM: { lift, w in
+                    let reps = workoutState.getAMRAP(lift: lift.rawValue, week: currentWeek)
+                    return estimate1RM(
+                        weight: w,
+                        reps: reps,
+                        formula: .epley,
+                        softWarnAt: 11,
+                        hardCap: 15,
+                        refuseAboveHardCap: true, // or false to cap instead of refuse
+                        roundTo: roundTo
+                    )
+                },
                 setBinding: setBinding,
                 tmFor: { lift in tmFor(lift) },
                 liveRepsText: $liveRepsText,
@@ -403,13 +425,6 @@ struct ContentView: View {
         workoutState.setAMRAP(lift: lift.rawValue, week: currentWeek, reps: r)
     }
 
-    private func est1RM(for lift: Lift, weight: Double) -> Double {
-        let reps = workoutState.getAMRAP(lift: lift.rawValue, week: currentWeek)
-        guard reps > 0 else { return 0 }
-        let est = weight * (1 + Double(reps) / 30.0)
-        return calculator.round(est)
-    }
-
     private func currentWorkoutMetrics() -> (est: Double, totalVol: Int, mainVol: Int, bbbVol: Int, assistVol: Int) {
         let scheme = program.weekScheme(for: currentWeek)
         let tmSel = tmFor(selectedLift)
@@ -452,10 +467,18 @@ struct ContentView: View {
         let est: Double = {
             guard top.amrap else { return 0 }
             let amrapReps = workoutState.getAMRAP(lift: selectedLift.rawValue, week: currentWeek)
-            guard amrapReps > 0 else { return 0 }
             let w = calculator.round(tmSel * top.pct)
-            let e = w * (1 + Double(amrapReps) / 30.0)
-            return calculator.round(e)
+
+            let r = estimate1RM(
+                weight: w,
+                reps: amrapReps,
+                formula: oneRMFormula,
+                softWarnAt: 11,
+                hardCap: 15,
+                refuseAboveHardCap: true,
+                roundTo: roundTo
+            )
+            return r.e1RM
         }()
 
         return (est, totalVol, Int(mainVol), Int(bbbVol), Int(assistVol))
