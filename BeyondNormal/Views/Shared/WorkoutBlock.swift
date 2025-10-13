@@ -232,6 +232,8 @@ struct WorkoutBlock: View {
                                     weight: newVal
                                 )
                             }
+                            // …then cascade forward to remaining (not-done) sets
+                            cascadeBBBWeight(from: bbbSetNum, newWeight: newVal, defaultWeight: defaultBBBWeight)
                         }
                     ),
                     currentReps: Binding(
@@ -258,6 +260,8 @@ struct WorkoutBlock: View {
                                     reps: newVal
                                 )
                             }
+                            // …then cascade forward
+                            cascadeBBBReps(from: bbbSetNum, newReps: newVal, defaultReps: 10)
                         }
                     ),
                     perSide: selectedLift == .row
@@ -283,6 +287,35 @@ struct WorkoutBlock: View {
             Text("Deload week: skip BBB/assistance and add ~30 min easy cardio.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+    
+    // MARK: - Cascade helpers (BBB)
+    private func cascadeBBBWeight(from startBBBSet: Int, newWeight: Double, defaultWeight: Double) {
+        // BBB sets are numbered 1...5; their "main tracking" set index is +3 (4...8)
+        for n in startBBBSet...5 {
+            let mainSetNum = n + 3
+            // skip sets already marked done
+            guard !workoutState.getSetComplete(lift: selectedLift.rawValue, week: currentWeek, set: mainSetNum) else { continue }
+
+            if abs(newWeight - defaultWeight) < 0.1 {
+                workoutState.setBBBWeight(lift: selectedLift.rawValue, week: currentWeek, set: n, weight: nil)
+            } else {
+                workoutState.setBBBWeight(lift: selectedLift.rawValue, week: currentWeek, set: n, weight: newWeight)
+            }
+        }
+    }
+
+    private func cascadeBBBReps(from startBBBSet: Int, newReps: Int, defaultReps: Int = 10) {
+        for n in startBBBSet...5 {
+            let mainSetNum = n + 3
+            guard !workoutState.getSetComplete(lift: selectedLift.rawValue, week: currentWeek, set: mainSetNum) else { continue }
+
+            if newReps == defaultReps {
+                workoutState.setBBBReps(lift: selectedLift.rawValue, week: currentWeek, set: n, reps: nil)
+            } else {
+                workoutState.setBBBReps(lift: selectedLift.rawValue, week: currentWeek, set: n, reps: newReps)
+            }
         }
     }
 }
