@@ -64,8 +64,10 @@ struct ContentView: View {
 
     private var oneRMFormula: OneRepMaxFormula {
         switch oneRMFormulaRaw.lowercased() {
-        case "wendler": return .wendler
-        default:        return .epley
+        case "epley":    return .epley
+        case "brzycki":  return .brzycki
+        case "mayhew":   return .mayhew
+        default:         return .epley   // safe default
         }
     }
     
@@ -249,7 +251,7 @@ struct ContentView: View {
                     return estimate1RM(
                         weight: w,
                         reps: reps,
-                        formula: .epley,
+                        formula: oneRMFormula,
                         softWarnAt: 11,
                         hardCap: 15,
                         refuseAboveHardCap: true, // or false to cap instead of refuse
@@ -262,7 +264,8 @@ struct ContentView: View {
                 workoutState: workoutState,
                 allowTimerStarts: allowTimerStarts,
                 armTimers: armTimers,
-                isWorkoutFinished: isWorkoutFinished
+                isWorkoutFinished: isWorkoutFinished,
+                currentFormula: oneRMFormula
             )
 
             AssistanceBlock(

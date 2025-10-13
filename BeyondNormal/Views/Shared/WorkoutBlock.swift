@@ -38,6 +38,9 @@ struct WorkoutBlock: View {
 
     // NEW: Whether this workout has been marked as finished
     let isWorkoutFinished: Bool
+    
+    // Passed in from ContentView so we can render formula in use.
+    let currentFormula: OneRepMaxFormula
 
     var body: some View {
         let scheme = program.weekScheme(for: currentWeek)
@@ -164,7 +167,8 @@ struct WorkoutBlock: View {
                     }
                 },
                 focus: amrapFocused,
-                refreshID: refreshID
+                refreshID: refreshID,
+                currentFormula: currentFormula
             )
         } else {
             SetRow(
