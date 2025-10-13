@@ -21,7 +21,6 @@ struct WorkoutBlock: View {
     let timerBBBsec: Int
 
     // Helpers provided by ContentView so state stays single-source-of-truth
-    // NOTE: now returns AmrapEstimate (value + note) instead of Double
     let est1RM: (Lift, Double) -> AmrapEstimate
     let setBinding: (Int) -> Binding<Bool>
     let tmFor: (Lift) -> Double
@@ -36,11 +35,14 @@ struct WorkoutBlock: View {
     let allowTimerStarts: Bool
     let armTimers: () -> Void
 
-    // NEW: Whether this workout has been marked as finished
+    // Whether this workout has been marked as finished
     let isWorkoutFinished: Bool
     
-    // Passed in from ContentView so we can render formula in use.
+    // For showing current formula in use
     let currentFormula: OneRepMaxFormula
+
+    // ✅ NEW: dynamic list of lifts (3/4/5 day)
+    let availableLifts: [Lift]
 
     var body: some View {
         let scheme = program.weekScheme(for: currentWeek)
@@ -68,16 +70,20 @@ struct WorkoutBlock: View {
                 .font(.title3.weight(.bold))
             Spacer()
             Picker("Week", selection: $currentWeek) {
-                Text("1").tag(1); Text("2").tag(2); Text("3").tag(3); Text("4").tag(4)
+                Text("1").tag(1)
+                Text("2").tag(2)
+                Text("3").tag(3)
+                Text("4").tag(4)
             }
             .pickerStyle(.segmented)
             .frame(maxWidth: 220)
         }
     }
 
+    // ✅ updated to use dynamic list
     private var liftPicker: some View {
         Picker("Lift", selection: $selectedLift) {
-            ForEach(Lift.allCases) { Text($0.label).tag($0) }
+            ForEach(availableLifts) { Text($0.label).tag($0) }
         }
         .pickerStyle(.segmented)
     }
@@ -137,18 +143,13 @@ struct WorkoutBlock: View {
         )
 
         if s2.amrap {
-            // Ask for the full estimate (value + note)
             let r = est1RM(selectedLift, w2)
             let capText: String? = {
                 switch r.note {
-                case .none:
-                    return nil
-                case .lowConfidence:
-                    return "Estimate low confidence (high reps)."
-                case .capped(let cap):
-                    return "Estimated using \(cap) reps (capped)."
-                case .invalidTooManyReps(let actual):
-                    return "Too many reps (\(actual)) to estimate 1RM."
+                case .none: return nil
+                case .lowConfidence: return "Estimate low confidence (high reps)."
+                case .capped(let cap): return "Estimated using \(cap) reps (capped)."
+                case .invalidTooManyReps(let actual): return "Too many reps (\(actual)) to estimate 1RM."
                 }
             }()
 
@@ -202,7 +203,7 @@ struct WorkoutBlock: View {
                 .font(.headline)
 
             ForEach(1...5, id: \.self) { bbbSetNum in
-                let setNum = bbbSetNum + 3 // Sets 4–8 in main tracking
+                let setNum = bbbSetNum + 3
                 BBBSetRow(
                     setNumber: bbbSetNum,
                     defaultWeight: defaultBBBWeight,
@@ -232,7 +233,6 @@ struct WorkoutBlock: View {
                                     weight: newVal
                                 )
                             }
-                            // …then cascade forward to remaining (not-done) sets
                             cascadeBBBWeight(from: bbbSetNum, newWeight: newVal, defaultWeight: defaultBBBWeight)
                         }
                     ),
@@ -260,7 +260,6 @@ struct WorkoutBlock: View {
                                     reps: newVal
                                 )
                             }
-                            // …then cascade forward
                             cascadeBBBReps(from: bbbSetNum, newReps: newVal, defaultReps: 10)
                         }
                     ),
@@ -290,12 +289,10 @@ struct WorkoutBlock: View {
         }
     }
     
-    // MARK: - Cascade helpers (BBB)
+    // MARK: - Cascade helpers
     private func cascadeBBBWeight(from startBBBSet: Int, newWeight: Double, defaultWeight: Double) {
-        // BBB sets are numbered 1...5; their "main tracking" set index is +3 (4...8)
         for n in startBBBSet...5 {
             let mainSetNum = n + 3
-            // skip sets already marked done
             guard !workoutState.getSetComplete(lift: selectedLift.rawValue, week: currentWeek, set: mainSetNum) else { continue }
 
             if abs(newWeight - defaultWeight) < 0.1 {
