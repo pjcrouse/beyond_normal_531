@@ -116,6 +116,19 @@ struct AssistanceBlock: View {
                             .foregroundColor(.secondary)
                     }
                 }
+                
+                let ex = assistanceFor(selectedLift)
+
+                // Compute the default assistance weight ONCE for this exercise/workout
+                let defaultAssistW: Double = {
+                    if ex.defaultWeight > 0 {
+                        return ex.defaultWeight
+                    }
+                    if ex.allowWeightToggle && workoutState.getAssistUseWeight(lift: selectedLift.rawValue, week: currentWeek) {
+                        return ex.toggledWeight
+                    }
+                    return 0
+                }()
 
                 ForEach(1...3, id: \.self) { setNum in
                     AssistSetRow(
@@ -152,6 +165,8 @@ struct AssistanceBlock: View {
                                         weight: clamped
                                     )
                                 }
+                                // Cascade forward to remaining, not-done sets
+                                cascadeAssistWeight(from: setNum, newWeight: newVal, defaultWeight: defaultAssistW)
                             }
                         ),
                         currentReps: Binding(
@@ -178,6 +193,8 @@ struct AssistanceBlock: View {
                                         reps: newVal
                                     )
                                 }
+                                // Cascade forward to remaining, not-done sets
+                                cascadeAssistReps(from: setNum, newReps: newVal, defaultReps: ex.defaultReps)
                             }
                         ),
                         perSide: (usesBarbell && hasBarWeight)
@@ -212,5 +229,30 @@ struct AssistanceBlock: View {
         }
         .cardStyle()
         .padding(.horizontal)
+    }
+    
+    // MARK: - Cascade helpers (Assistance)
+    private func cascadeAssistWeight(from startSet: Int, newWeight: Double, defaultWeight: Double) {
+        for n in startSet...3 {
+            guard !workoutState.getAssistComplete(lift: selectedLift.rawValue, week: currentWeek, set: n) else { continue }
+
+            if abs(newWeight - defaultWeight) < 0.1 {
+                workoutState.setAssistWeight(lift: selectedLift.rawValue, week: currentWeek, set: n, weight: nil)
+            } else {
+                workoutState.setAssistWeight(lift: selectedLift.rawValue, week: currentWeek, set: n, weight: newWeight)
+            }
+        }
+    }
+
+    private func cascadeAssistReps(from startSet: Int, newReps: Int, defaultReps: Int) {
+        for n in startSet...3 {
+            guard !workoutState.getAssistComplete(lift: selectedLift.rawValue, week: currentWeek, set: n) else { continue }
+
+            if newReps == defaultReps {
+                workoutState.setAssistReps(lift: selectedLift.rawValue, week: currentWeek, set: n, reps: nil)
+            } else {
+                workoutState.setAssistReps(lift: selectedLift.rawValue, week: currentWeek, set: n, reps: newReps)
+            }
+        }
     }
 }
