@@ -20,6 +20,7 @@ final class ImplementWeights: ObservableObject {
         "BP": 45,
         "DL": 45,
         "RW": 45,
+        "PR": 45,
 
         // Barbell/EZ assistance examples
         "front_squat": 45,
@@ -55,7 +56,13 @@ final class ImplementWeights: ObservableObject {
     }
 
     func weight(for lift: Lift) -> Double {
-        weight(for: lift.rawValue)
+        switch lift {
+        case .press:
+            // ✅ Make Press use the same implement as Bench
+            return weight(for: Lift.bench.rawValue)
+        default:
+            return weight(for: lift.rawValue)
+        }
     }
 
     func setWeight(_ w: Double, for exerciseID: String) {
