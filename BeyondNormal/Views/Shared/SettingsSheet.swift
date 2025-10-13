@@ -244,7 +244,7 @@ struct SettingsSheet: View {
                         tmpSquat = "315"; tmpBench = "225"
                         tmpDeadlift = "405"; tmpRow = "185"
                         tmpBarWeight = "45"; tmpRoundTo = "5"
-                        tmpTimerRegular = "240"; tmpTimerBBB = "180"
+                        tmpTimerRegular = "180"; tmpTimerBBB = "120"
                         ImplementWeights.shared.restoreDefaults()
                     } label: {
                         Label("Reset to defaults", systemImage: "arrow.counterclockwise")

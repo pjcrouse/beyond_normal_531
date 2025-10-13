@@ -122,7 +122,7 @@ struct WorkoutBlock: View {
             onCheck: { checked in
                 if checked && !isWorkoutFinished {
                     armTimers()
-                    if allowTimerStarts { timer.start(seconds: timerRegularSec) }
+                    timer.start(seconds: timerRegularSec)
                 }
             },
             refreshID: refreshID
@@ -136,7 +136,7 @@ struct WorkoutBlock: View {
             onCheck: { checked in
                 if checked && !isWorkoutFinished {
                     armTimers()
-                    if allowTimerStarts { timer.start(seconds: timerRegularSec) }
+                    timer.start(seconds: timerRegularSec)
                 }
             },
             refreshID: refreshID
@@ -164,7 +164,7 @@ struct WorkoutBlock: View {
                 onCheck: { checked in
                     if checked && !isWorkoutFinished {
                         armTimers()
-                        if allowTimerStarts { timer.start(seconds: timerRegularSec) }
+                        timer.start(seconds: timerRegularSec)
                     }
                 },
                 focus: amrapFocused,
@@ -180,7 +180,7 @@ struct WorkoutBlock: View {
                 onCheck: { checked in
                     if checked && !isWorkoutFinished {
                         armTimers()
-                        if allowTimerStarts { timer.start(seconds: timerRegularSec) }
+                        timer.start(seconds: timerRegularSec)
                     }
                 },
                 refreshID: refreshID
@@ -276,7 +276,7 @@ struct WorkoutBlock: View {
                     onCheck: { checked in
                         if checked && !isWorkoutFinished {
                             armTimers()
-                            if allowTimerStarts { timer.start(seconds: timerBBBsec) }
+                            timer.start(seconds: timerBBBsec)
                         }
                     },
                     refreshID: refreshID

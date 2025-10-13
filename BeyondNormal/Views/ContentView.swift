@@ -23,8 +23,8 @@ struct ContentView: View {
     @AppStorage("assist_weight_deadlift") private var assistWeightDeadlift: Double = 0
     @AppStorage("assist_weight_row")      private var assistWeightRow: Double = 0
 
-    @AppStorage("timer_regular_sec") private var timerRegularSec: Int = 240
-    @AppStorage("timer_bbb_sec")     private var timerBBBsec: Int = 180
+    @AppStorage("timer_regular_sec") private var timerRegularSec: Int = 180
+    @AppStorage("timer_bbb_sec")     private var timerBBBsec: Int = 120
     @AppStorage("current_week")      private var currentWeek: Int = 1
 
     @AppStorage("tm_progression_style") private var tmProgStyleRaw: String = "classic"
