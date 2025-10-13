@@ -3,6 +3,8 @@ import SwiftUI
 struct HistorySheet: View {
     // ✅ Pass in the program’s active lifts, in UI order
     let availableLifts: [Lift]
+    let currentProgramWeek: Int
+    let currentCycle: Int
 
     @State private var entries: [WorkoutEntry] = []
     @State private var expanded: Set<UUID> = []
@@ -116,8 +118,11 @@ struct HistorySheet: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        let interval = currentCalendarWeekInterval()
-                        let result = computeWeeklySummary(for: interval, entries: filteredEntries)
+                        let result = computeProgramWeekSummary(
+                            programWeek: currentProgramWeek,
+                            cycle: currentCycle,
+                            entries: filteredEntries
+                        )
                         weeklyResult = result
                     } label: { Image(systemName: "calendar.badge.checkmark") }
                     .accessibilityLabel("Weekly Summary")

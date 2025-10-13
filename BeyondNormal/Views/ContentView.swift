@@ -43,6 +43,9 @@ struct ContentView: View {
     // Configurable workouts per week support
     @AppStorage("workouts_per_week") private var workoutsPerWeek: Int = 4   // 3, 4, or 5
     @AppStorage("fourth_lift")       private var fourthLiftRaw: String = "row" // "row" | "press"
+    
+    // Fix for cycle/week
+    @AppStorage("current_cycle") private var currentCycle: Int = 1
 
     @StateObject private var workoutState = WorkoutStateManager()
     @StateObject private var timer = TimerManager()
@@ -182,8 +185,12 @@ struct ContentView: View {
             .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showHistory) {
-            HistorySheet(availableLifts: activeLifts)
-                .presentationDetents([.medium, .large])
+            HistorySheet(
+                availableLifts: activeLifts,
+                currentProgramWeek: currentWeek,
+                currentCycle: currentCycle
+            )
+            .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showGuide) {
             NavigationStack { UserGuideView() }
@@ -548,23 +555,35 @@ struct ContentView: View {
             totalVolume: metrics.totalVol,
             bbbPct: bbbPct,
             amrapReps: workoutState.getAMRAP(lift: selectedLift.rawValue, week: currentWeek),
-            notes: workoutNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : workoutNotes
+            notes: workoutNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : workoutNotes,
+            programWeek: currentWeek,
+            cycle: currentCycle
         )
         WorkoutStore.shared.append(entry)
 
-        // Mark this workout as finished
+        // Update PRs if we got an estimate
+        if metrics.est > 0 {
+            PRStore.shared.considerPR(cycle: currentCycle, lift: selectedLift.label, est1RM: Int(metrics.est.rounded()))
+        }
+
+        // Mark finished
         workoutState.markWorkoutFinished(lift: selectedLift.rawValue, week: currentWeek)
+        workoutState.markLiftComplete(selectedLift.rawValue, week: currentWeek)
 
         timer.reset()
         workoutNotes = ""
 
         if autoAdvanceWeek {
-            workoutState.markLiftComplete(selectedLift.rawValue, week: currentWeek)
-
             if workoutState.allLiftsComplete(for: currentWeek, totalLifts: activeLifts.count) {
-                currentWeek = currentWeek % 4 + 1
+                if currentWeek < 4 {
+                    currentWeek += 1
+                } else {
+                    currentWeek = 1
+                    currentCycle += 1
+                    // (Optional) adjust TMs here if you want classic progression
+                }
                 workoutState.resetCompletedLifts(for: currentWeek)
-                savedAlertText += "\nAll lifts complete — advancing to Week \(currentWeek)!"
+                savedAlertText += "\nAdvancing to Week \(currentWeek)."
             }
         }
 
