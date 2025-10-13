@@ -95,9 +95,15 @@ struct SettingsSheet: View {
                 Section(header: Text("1RM Formula")) {
                     Picker("Estimation Formula", selection: $oneRMFormulaRaw) {
                         Text("Epley").tag("epley")
-                        Text("Wendler").tag("wendler")
+                        Text("Brzycki").tag("brzycki")
+                        Text("Mayhew").tag("mayhew")
                     }
                     .pickerStyle(.segmented)
+
+                    // Optional: short guidance
+                    Text("Epley = simple/standard • Brzycki = conservative at high reps • Mayhew = research-based sigmoid")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("TM Progression Style") {
@@ -211,6 +217,10 @@ struct SettingsSheet: View {
                 }
             }
             .onAppear {
+                // Migrate old value once: map "wendler" -> "epley"
+                if oneRMFormulaRaw.lowercased() == "wendler" {
+                    oneRMFormulaRaw = "epley"
+                }
                 tmpSquat = String(format: "%.0f", tmSquat)
                 tmpBench = String(format: "%.0f", tmBench)
                 tmpDeadlift = String(format: "%.0f", tmDeadlift)

@@ -66,10 +66,13 @@ public struct AMRAPRow: View {
     public var onCheck: ((Bool) -> Void)?
     public var focus: FocusState<Bool>.Binding
     public let refreshID: String
+    
+    // ✅ NEW: carry the chosen formula down to the row
+    public let currentFormula: OneRepMaxFormula
 
     @State private var lastKnownDone: Bool = false
 
-    public init(label: String, weight: Double, perSide: [Double], done: Binding<Bool>, reps: Binding<String>, est1RM: Double, capNote: String? = nil, onCheck: ((Bool) -> Void)? = nil, focus: FocusState<Bool>.Binding, refreshID: String = "") {
+    public init(label: String, weight: Double, perSide: [Double], done: Binding<Bool>, reps: Binding<String>, est1RM: Double, capNote: String? = nil, onCheck: ((Bool) -> Void)? = nil, focus: FocusState<Bool>.Binding, refreshID: String = "", currentFormula: OneRepMaxFormula) {
         self.label = label
         self.weight = weight
         self.perSide = perSide
@@ -80,6 +83,7 @@ public struct AMRAPRow: View {
         self.onCheck = onCheck
         self.focus = focus
         self.refreshID = refreshID
+        self.currentFormula = currentFormula
     }
 
     public var body: some View {
@@ -123,6 +127,7 @@ public struct AMRAPRow: View {
                         if est1RM > 0 {
                             Text("Est 1RM ≈ \(Int(est1RM)) lb")
                                 .font(.subheadline)
+                            FormulaTag(formula: currentFormula) // ✅ uses stored prop
                                 .foregroundStyle(.blue)
                         }
                         if let note = capNote, !note.isEmpty {
