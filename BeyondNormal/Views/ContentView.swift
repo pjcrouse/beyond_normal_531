@@ -11,6 +11,7 @@ struct ContentView: View {
     @AppStorage("tm_bench")    private var tmBench: Double = 225
     @AppStorage("tm_deadlift") private var tmDeadlift: Double = 405
     @AppStorage("tm_row")      private var tmRow: Double = 185
+    @AppStorage("tm_press") private var tmPress: Double = 135
 
     @AppStorage("bar_weight")  private var barWeight: Double = 45
     @AppStorage("round_to")    private var roundTo: Double = 5
@@ -34,9 +35,14 @@ struct ContentView: View {
     @AppStorage("assist_bench_id")    private var assistBenchID: String = "triceps_ext"
     @AppStorage("assist_deadlift_id") private var assistDeadliftID: String = "back_ext"
     @AppStorage("assist_row_id")      private var assistRowID: String = "spider_curls"
+    @AppStorage("assist_press_id") private var assistPressID: String = "triceps_ext" // safe default
     
     // 1 Rep Max Formula
     @AppStorage("one_rm_formula") private var oneRMFormulaRaw: String = "epley"
+    
+    // Configurable workouts per week support
+    @AppStorage("workouts_per_week") private var workoutsPerWeek: Int = 4   // 3, 4, or 5
+    @AppStorage("fourth_lift")       private var fourthLiftRaw: String = "row" // "row" | "press"
 
     @StateObject private var workoutState = WorkoutStateManager()
     @StateObject private var timer = TimerManager()
@@ -68,6 +74,18 @@ struct ContentView: View {
         case "brzycki":  return .brzycki
         case "mayhew":   return .mayhew
         default:         return .epley   // safe default
+        }
+    }
+    
+    private var fourthLift: Lift {
+        fourthLiftRaw.lowercased() == "press" ? .press : .row
+    }
+
+    private var activeLifts: [Lift] {
+        switch workoutsPerWeek {
+        case 3:  return [.squat, .bench, .deadlift]
+        case 4:  return [.squat, .bench, .deadlift, fourthLift]
+        default: return [.squat, .bench, .deadlift, .row, .press]  // 5+: both
         }
     }
     
@@ -144,6 +162,7 @@ struct ContentView: View {
                 tmBench: $tmBench,
                 tmDeadlift: $tmDeadlift,
                 tmRow: $tmRow,
+                tmPress: $tmPress,
                 barWeight: $barWeight,
                 roundTo: $roundTo,
                 bbbPct: $bbbPct,
@@ -155,12 +174,15 @@ struct ContentView: View {
                 assistSquatID: $assistSquatID,
                 assistBenchID: $assistBenchID,
                 assistDeadliftID: $assistDeadliftID,
-                assistRowID: $assistRowID
+                assistRowID: $assistRowID,
+                assistPressID: $assistPressID,
+                workoutsPerWeek: $workoutsPerWeek,
+                fourthLiftRaw: $fourthLiftRaw
             )
             .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showHistory) {
-            HistorySheet()
+            HistorySheet(availableLifts: activeLifts)
                 .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showGuide) {
@@ -191,7 +213,21 @@ struct ContentView: View {
             allowTimerStarts = false
 
             liveRepsText = repsText(for: selectedLift)
-            // NOTE: We do NOT arm timers here. armTimers() runs on first user action.
+
+            // ✅ Ensure selectedLift is valid given the user's config
+            if !activeLifts.contains(selectedLift) {
+                selectedLift = activeLifts.first ?? .bench
+            }
+        }
+        .onChange(of: workoutsPerWeek) { _, _ in
+            if !activeLifts.contains(selectedLift) {
+                selectedLift = activeLifts.first ?? .bench
+            }
+        }
+        .onChange(of: fourthLiftRaw) { _, _ in
+            if !activeLifts.contains(selectedLift) {
+                selectedLift = activeLifts.first ?? .bench
+            }
         }
         .onChange(of: selectedLift) { _, new in
             liveRepsText = repsText(for: new)
@@ -215,7 +251,9 @@ struct ContentView: View {
                 tmSquat: tmSquat,
                 tmBench: tmBench,
                 tmDeadlift: tmDeadlift,
-                tmRow: tmRow
+                tmRow: tmRow,
+                tmPress: tmPress,
+                activeLifts: activeLifts
             )
 
             QuickTargetHeader(
@@ -265,7 +303,8 @@ struct ContentView: View {
                 allowTimerStarts: allowTimerStarts,
                 armTimers: armTimers,
                 isWorkoutFinished: isWorkoutFinished,
-                currentFormula: oneRMFormula
+                currentFormula: oneRMFormula,
+                availableLifts: activeLifts
             )
 
             AssistanceBlock(
@@ -286,6 +325,7 @@ struct ContentView: View {
                     case .bench:    return assistWeightBench == 0 ? nil : assistWeightBench
                     case .deadlift: return assistWeightDeadlift == 0 ? nil : assistWeightDeadlift
                     case .row:      return assistWeightRow == 0 ? nil : assistWeightRow
+                    case .press:    return assistWeightBench == 0 ? nil : assistWeightBench
                     }
                 },
                 allowTimerStarts: allowTimerStarts,
@@ -364,6 +404,7 @@ struct ContentView: View {
         case .bench:    id = assistBenchID
         case .deadlift: id = assistDeadliftID
         case .row:      id = assistRowID
+        case .press:    id = assistPressID
         }
 
         // 1) Try user-created first
@@ -384,6 +425,7 @@ struct ContentView: View {
         case .bench: return tmBench
         case .deadlift: return tmDeadlift
         case .row: return tmRow
+        case .press:    return tmPress
         }
     }
 
@@ -415,6 +457,7 @@ struct ContentView: View {
         case .bench:    assistWeightBench = 65
         case .deadlift: assistWeightDeadlift = 0
         case .row:      assistWeightRow = 0
+        case .press:    assistWeightBench = 65 
         }
     }
 
@@ -518,7 +561,7 @@ struct ContentView: View {
         if autoAdvanceWeek {
             workoutState.markLiftComplete(selectedLift.rawValue, week: currentWeek)
 
-            if workoutState.allLiftsComplete(for: currentWeek, totalLifts: Lift.allCases.count) {
+            if workoutState.allLiftsComplete(for: currentWeek, totalLifts: activeLifts.count) {
                 currentWeek = currentWeek % 4 + 1
                 workoutState.resetCompletedLifts(for: currentWeek)
                 savedAlertText += "\nAll lifts complete — advancing to Week \(currentWeek)!"

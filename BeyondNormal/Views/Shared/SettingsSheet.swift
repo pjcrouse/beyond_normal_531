@@ -5,6 +5,7 @@ struct SettingsSheet: View {
     @Binding var tmBench: Double
     @Binding var tmDeadlift: Double
     @Binding var tmRow: Double
+    @Binding var tmPress: Double
     @Binding var barWeight: Double
     @Binding var roundTo: Double
     @Binding var bbbPct: Double
@@ -19,6 +20,11 @@ struct SettingsSheet: View {
     @Binding var assistBenchID: String
     @Binding var assistDeadliftID: String
     @Binding var assistRowID: String
+    @Binding var assistPressID: String
+    
+    // Workouts per week preferences
+    @Binding var workoutsPerWeek: Int        // 3, 4, or 5
+    @Binding var fourthLiftRaw: String       // "row" | "press"
 
     @State private var tmpSquat = ""
     @State private var tmpBench = ""
@@ -31,9 +37,10 @@ struct SettingsSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @FocusState private var focusedField: Field?
-
+    
+    @State private var tmpPress = ""
     enum Field {
-        case squat, bench, deadlift, row, barWeight, roundTo, timerRegular, timerBBB
+        case squat, bench, deadlift, row, press, barWeight, roundTo, timerRegular, timerBBB
     }
 
     var body: some View {
@@ -44,6 +51,36 @@ struct SettingsSheet: View {
                     numField("Bench", value: $tmpBench, field: .bench)
                     numField("Deadlift", value: $tmpDeadlift, field: .deadlift)
                     numField("Row", value: $tmpRow, field: .row)
+                    numField("Press", value: $tmpPress, field: .press)
+                }
+                
+                Section("Workouts per Week") {
+                    Picker("Count", selection: $workoutsPerWeek) {
+                        Text("3 days").tag(3)
+                        Text("4 days").tag(4)
+                        Text("5 days").tag(5)
+                    }
+                    .pickerStyle(.segmented)
+
+                    if workoutsPerWeek == 4 {
+                        Picker("4th Workout", selection: $fourthLiftRaw) {
+                            Text("Row").tag("row")
+                            Text("Press").tag("press")
+                        }
+                        .pickerStyle(.segmented)
+
+                        Text("If 4 days: choose Row or Standing Press for Day 4.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if workoutsPerWeek == 5 {
+                        Text("5 days include both Row and Standing Press.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("3 days: Squat, Bench, Deadlift.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Section("Loading") {
@@ -118,6 +155,7 @@ struct SettingsSheet: View {
                 }
 
                 Section("Assistance Exercises") {
+                    // Always present for SQ/BP/DL
                     NavigationLink("Squat Day") {
                         ExercisePickerView(
                             title: "Choose Squat Assistance",
@@ -139,20 +177,50 @@ struct SettingsSheet: View {
                             allowedCategories: [.legs, .core]
                         )
                     }
-                    NavigationLink("Row Day") {
-                        ExercisePickerView(
-                            title: "Choose Row Assistance",
-                            selectedID: $assistRowID,
-                            allowedCategories: [.pull]
-                        )
+
+                    // 4th/5th day logic
+                    if workoutsPerWeek == 4 {
+                        if fourthLiftRaw == "row" {
+                            NavigationLink("Row Day") {
+                                ExercisePickerView(
+                                    title: "Choose Row Assistance",
+                                    selectedID: $assistRowID,
+                                    allowedCategories: [.pull]
+                                )
+                            }
+                        } else { // "press"
+                            NavigationLink("Press Day") {
+                                ExercisePickerView(
+                                    title: "Choose Press Assistance",
+                                    selectedID: $assistPressID,
+                                    allowedCategories: [.push]
+                                )
+                            }
+                        }
+                    } else if workoutsPerWeek >= 5 {
+                        NavigationLink("Row Day") {
+                            ExercisePickerView(
+                                title: "Choose Row Assistance",
+                                selectedID: $assistRowID,
+                                allowedCategories: [.pull]
+                            )
+                        }
+                        NavigationLink("Press Day") {
+                            ExercisePickerView(
+                                title: "Choose Press Assistance",
+                                selectedID: $assistPressID,
+                                allowedCategories: [.push]
+                            )
+                        }
                     }
 
                     Button {
-                        // Restore recommended defaults
+                        // Restore recommended defaults (kept consistent)
                         assistSquatID = "split_squat"
                         assistBenchID = "triceps_ext"
                         assistDeadliftID = "back_ext"
                         assistRowID = "spider_curls"
+                        assistPressID = "triceps_ext" // ✅ NEW default
                     } label: {
                         Label("Restore Recommended", systemImage: "arrow.counterclockwise")
                     }
@@ -208,6 +276,7 @@ struct SettingsSheet: View {
                         if let v = Double(tmpBench) { tmBench = v }
                         if let v = Double(tmpDeadlift) { tmDeadlift = v }
                         if let v = Double(tmpRow) { tmRow = v }
+                        if let v = Double(tmpPress)    { tmPress    = v }
                         if let v = Double(tmpBarWeight) { barWeight = max(1, min(v, 200)) }
                         if let v = Double(tmpRoundTo) { roundTo   = max(0.5, min(v, 100)) }
                         if let v = Int(tmpTimerRegular) { timerRegularSec = max(1, v) }
@@ -225,10 +294,18 @@ struct SettingsSheet: View {
                 tmpBench = String(format: "%.0f", tmBench)
                 tmpDeadlift = String(format: "%.0f", tmDeadlift)
                 tmpRow = String(format: "%.0f", tmRow)
+                tmpPress        = String(format: "%.0f", tmPress)  
                 tmpBarWeight = String(format: "%.0f", barWeight)
                 tmpRoundTo = String(format: "%.0f", roundTo)
                 tmpTimerRegular = String(timerRegularSec)
                 tmpTimerBBB = String(timerBBBsec)
+                
+                if fourthLiftRaw != "row" && fourthLiftRaw != "press" {
+                    fourthLiftRaw = "row"
+                }
+                if !(3...5).contains(workoutsPerWeek) {
+                    workoutsPerWeek = 4
+                }
             }
         }
     }
