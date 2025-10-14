@@ -17,3 +17,14 @@ enum Lift: String, CaseIterable, Identifiable {
         }
     }
 }
+extension Lift {
+    var isUpperBody: Bool {
+        switch self {
+        case .bench, .row, .press: return true
+        case .squat, .deadlift:    return false
+        }
+    }
+}
+extension Lift {
+    var isLowerBody: Bool { !isUpperBody }
+}
