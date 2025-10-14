@@ -248,3 +248,20 @@ final class WorkoutStateManager: ObservableObject {
         saveCompletedLifts()
     }
 }
+
+// MARK: - Cycle Reset
+
+extension WorkoutStateManager {
+    /// Clears ALL tracked state (sets, AMRAP, BBB, assistance, notes/finished flags)
+    /// for weeks 1...4 across the provided lifts.
+    func resetEntireCycle(lifts: [Lift]) {
+        // Clear each lift for each week
+        for week in 1...4 {
+            for lift in lifts {
+                resetLift(lift: lift.rawValue, week: week)
+            }
+            // Also clear the "completed lifts" tracker for that week
+            resetCompletedLifts(for: week)
+        }
+    }
+}
