@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct QuickTargetHeader: View {
+    let cycle: Int
     let week: Int
     let liftLabel: String
     let topLine: String
@@ -8,7 +9,7 @@ struct QuickTargetHeader: View {
 
     var body: some View {
         VStack(spacing: 4) {
-            Text("Week \(week) • \(liftLabel)")
+            Text("Cycle \(cycle) • Week \(week) • \(liftLabel)")
                 .font(.headline)
             Text("\(topLine) → \(fmt(topWeight)) lb")
                 .font(.title3.weight(.bold))

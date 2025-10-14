@@ -28,7 +28,7 @@ struct ContentView: View {
     @AppStorage("current_week")      private var currentWeek: Int = 1
 
     @AppStorage("tm_progression_style") private var tmProgStyleRaw: String = "classic"
-    @AppStorage("auto_advance_week")    private var autoAdvanceWeek: Bool = false
+    @AppStorage("auto_advance_week")    private var autoAdvanceWeek: Bool = true
 
     // Selected assistance by main lift
     @AppStorage("assist_squat_id")    private var assistSquatID: String = "split_squat"
@@ -343,6 +343,7 @@ struct ContentView: View {
             )
 
             QuickTargetHeader(
+                cycle: currentCycle,
                 week: currentWeek,
                 liftLabel: selectedLift.label,
                 topLine: currentScheme.topLine,
@@ -467,17 +468,6 @@ struct ContentView: View {
                         .font(.largeTitle.weight(.bold))
                 }
             }
-
-            // Cycle • Week chip (read-only; picker stays in WorkoutBlock)
-            Text("Cycle \(currentCycle) • Week \(currentWeek)")
-                .font(.caption)
-                .monospacedDigit()
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(
-                    Capsule().fill(Color.secondary.opacity(0.15))
-                )
-                .accessibilityLabel("Cycle \(currentCycle), Week \(currentWeek)")
         }
         .padding(.horizontal)
     }
@@ -494,12 +484,26 @@ struct ContentView: View {
     }
 
     private var resetButton: some View {
-        Button(role: .destructive) {
-            showResetConfirm = true
-        } label: {
-            Label("Reset Workout (Current Lift)", systemImage: "arrow.uturn.backward")
+        HStack {
+            Button(role: .destructive) {
+                showResetConfirm = true
+            } label: {
+                Label("Reset Workout (Current Lift)", systemImage: "arrow.uturn.backward")
+            }
+            .buttonStyle(.bordered)
+            .tint(.blue)
+            .accessibilityLabel("Reset current lift")
+
+            #if DEBUG
+            Button {
+                debugAutofillCurrentWorkout()
+            } label: {
+                Label("Auto-Fill (Debug)", systemImage: "wand.and.stars")
+            }
+            .buttonStyle(.bordered)
+            .tint(.blue)
+            #endif
         }
-        .accessibilityLabel("Reset current lift")
     }
 
     // MARK: - Helpers
@@ -688,7 +692,7 @@ struct ContentView: View {
                     let oldCycle = currentCycle
                     currentCycle += 1
                     currentWeek = 1
-                    workoutState.resetCompletedLifts(for: currentWeek)
+                    workoutState.resetEntireCycle(lifts: Lift.allCases)
 
                     // Capture old TMs for summary
                     let oldSQ = tmSquat
@@ -779,4 +783,48 @@ struct ContentView: View {
         guard allowTimerStarts, timer.allowStarts else { return }
         timer.start(seconds: seconds)
     }
+#if DEBUG
+/// Auto-fills ONLY the current workout (selectedLift @ currentWeek).
+private func debugAutofillCurrentWorkout() {
+    let lift = selectedLift
+    let liftKey = lift.rawValue
+    let week = currentWeek
+    let scheme = program.weekScheme(for: week)
+    let tmSel = tmFor(lift)
+
+    // --- Main sets (1..3) ---
+    for setNum in 1...3 {
+        workoutState.setSetComplete(lift: liftKey, week: week, set: setNum, value: true)
+    }
+
+    // --- AMRAP reps if this week has AMRAP ---
+    if scheme.main.indices.contains(2), scheme.main[2].amrap {
+        let reps = Int.random(in: 5...15)
+        workoutState.setAMRAP(lift: liftKey, week: week, reps: reps)
+        // keep the on-screen text in sync
+        liveRepsText = String(reps)
+    } else {
+        // deload / no AMRAP
+        workoutState.setAMRAP(lift: liftKey, week: week, reps: 0)
+        liveRepsText = ""
+    }
+
+    // --- BBB & Assistance only on non-deload weeks ---
+    if scheme.showBBB {
+        // BBB sets are tracked as main set indices 4..8; per BBB UI they’re 1..5
+        let defaultBBBW = calculator.round(tmSel * bbbPct)
+
+        for b in 1...5 {
+            workoutState.setSetComplete(lift: liftKey, week: week, set: b + 3, value: true)
+            workoutState.setBBBWeight(lift: liftKey, week: week, set: b, weight: defaultBBBW)
+            workoutState.setBBBReps(lift: liftKey, week: week, set: b, reps: 10)
+        }
+
+        // Assistance 1..3 → mark complete; weight/reps fall back to defaults
+        for a in 1...3 {
+            workoutState.setAssistComplete(lift: liftKey, week: week, set: a, value: true)
+        }
+    }
+}
+#endif
 }
