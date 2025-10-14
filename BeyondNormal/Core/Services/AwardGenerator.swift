@@ -51,8 +51,14 @@ final class AwardGenerator {
 
     @MainActor
     private func render<V: View>(_ view: V, to url: URL, square: CGFloat) {
-        let renderer = ImageRenderer(content: view.frame(width: square, height: square))
+        let content = view
+            .frame(width: square, height: square)
+            .background(Color.clear)     // ensure no fill
+
+        let renderer = ImageRenderer(content: content)
         renderer.scale = UIScreen.main.scale
+        renderer.isOpaque = false        // <- transparency enabled
+
         if let uiImage = renderer.uiImage, let data = uiImage.pngData() {
             try? data.write(to: url)
         }

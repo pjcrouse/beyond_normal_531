@@ -50,25 +50,26 @@ struct AwardImage: View {
 
 struct AwardDetailView: View {
     let award: Award
-    @State private var flipped = false
 
     var body: some View {
         ZStack {
-            AwardImage(award: award, front: true)
-                .opacity(flipped ? 0 : 1)
-                .rotation3DEffect(.degrees(flipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
-            AwardImage(award: award, front: false)
-                .opacity(flipped ? 1 : 0)
-                .rotation3DEffect(.degrees(flipped ? 0 : -180), axis: (x: 0, y: 1, z: 0))
-        }
-        .aspectRatio(1, contentMode: .fit)
-        .padding()
-        .background(Color.black.ignoresSafeArea())
-        .frame(maxWidth: 500, maxHeight: 500)
-        .padding()
-        .background(Color.black.edgesIgnoringSafeArea(.all))
-        .onTapGesture {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) { flipped.toggle() }
+            Color.black.ignoresSafeArea()
+
+            VStack(spacing: 20) {
+                // 👇 This is the new interactive medal
+                InteractiveMedalFlipView(award: award)
+                    .frame(width: 300, height: 300)
+                    .padding(.top, 40)
+
+                Text(award.title)
+                    .font(.title2.bold())
+                    .foregroundStyle(.white)
+
+                Text(award.date.formatted(date: .abbreviated, time: .omitted))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding()
         }
         .toolbar {
             ToolbarItem(placement: .principal) {

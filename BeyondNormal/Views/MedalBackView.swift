@@ -1,6 +1,5 @@
 import SwiftUI
 
-// Reusable engraved text stack
 private struct EngravedText: View {
     let text: String
     let font: Font
@@ -8,7 +7,6 @@ private struct EngravedText: View {
 
     var body: some View {
         ZStack {
-            // Burn / recess (darker, lower-right)
             Text(text)
                 .font(font)
                 .tracking(tracking)
@@ -17,7 +15,6 @@ private struct EngravedText: View {
                 .offset(x: 0.7, y: 1.0)
                 .blendMode(.multiply)
 
-            // Highlight (upper-left)
             Text(text)
                 .font(font)
                 .tracking(tracking)
@@ -26,7 +23,6 @@ private struct EngravedText: View {
                 .offset(x: -0.7, y: -1.0)
                 .blendMode(.screen)
 
-            // Subtle edge tone to keep edges crisp (optional)
             Text(text)
                 .font(font)
                 .tracking(tracking)
@@ -34,14 +30,14 @@ private struct EngravedText: View {
                 .blendMode(.overlay)
                 .opacity(0.7)
         }
-        .compositingGroup() // ensure blends composite against the metal
+        .compositingGroup()
     }
 }
 
 struct MedalBackView: View {
     let user: String
-    let line1: String   // e.g., "403 LB"
-    let line2: String   // e.g., "DEADLIFT PR"
+    let line1: String
+    let line2: String
     let date: Date
 
     var body: some View {
@@ -50,32 +46,29 @@ struct MedalBackView: View {
                 .resizable()
                 .scaledToFit()
 
-            // Layout tuned for a 1024x1024 render, but scales nicely in the app
             VStack(spacing: 14) {
                 EngravedText(
                     text: "EARNED BY \(user.uppercased())",
                     font: .system(size: 32, weight: .semibold, design: .rounded),
                     tracking: 2
                 )
-
                 EngravedText(
-                    text: line1, // "403 LB"
+                    text: line1, // e.g., "405 LB"
                     font: .system(size: 96, weight: .black, design: .rounded)
                 )
-
                 EngravedText(
-                    text: line2, // "DEADLIFT PR"
+                    text: line2, // e.g., "DEADLIFT PR"
                     font: .system(size: 46, weight: .heavy, design: .rounded)
                 )
-
                 EngravedText(
                     text: date.formatted(.dateTime.month(.abbreviated).day().year()),
                     font: .system(size: 30, weight: .semibold, design: .rounded)
                 )
             }
-            .padding(.horizontal, 90) // keep text comfortably inside the rim
+            .padding(.horizontal, 90)
             .padding(.top, 20)
         }
-        .background(Color.black) // overall canvas
+        .clipShape(Circle())          // <- trims to circular alpha
+        .background(Color.clear)      // <- no black matte
     }
 }
