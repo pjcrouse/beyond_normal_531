@@ -67,10 +67,79 @@ struct ContentView: View {
 
     // Gate that views check before calling timer.start(...)
     @State private var allowTimerStarts = false
+    
+    @State private var showPRsSheet = false
 
     // Library for assistance lookup (still needed for selected exercise resolution)
     @EnvironmentObject private var assistanceLibrary: AssistanceLibrary
 
+    private var isUpper: (Lift) -> Bool { { $0 == .bench || $0 == .press || $0 == .row } }
+    private var isLower: (Lift) -> Bool { { $0 == .squat || $0 == .deadlift } }
+
+    // Bump rules for Classic
+    private func classicBumpAmount(for lift: Lift) -> Double {
+        if isUpper(lift) { return 5 }   // +5 for upper
+        if isLower(lift) { return 10 }  // +10 for lower
+        return 0
+    }
+
+    // Cap rules for Auto (max per cycle change)
+    private func autoMaxDelta(for lift: Lift) -> Double {
+        if isUpper(lift) { return 10 }  // cap +10 upper
+        if isLower(lift) { return 20 }  // cap +20 lower
+        return 0
+    }
+
+    // Read/write TMs by lift
+    private func getTM(_ lift: Lift) -> Double {
+        switch lift {
+        case .squat: return tmSquat
+        case .bench: return tmBench
+        case .deadlift: return tmDeadlift
+        case .row: return tmRow
+        case .press: return tmPress
+        }
+    }
+
+    private func setTM(_ lift: Lift, _ value: Double) {
+        let v = max(45, value.rounded())  // keep sane & whole lbs
+        switch lift {
+        case .squat: tmSquat = v
+        case .bench: tmBench = v
+        case .deadlift: tmDeadlift = v
+        case .row: tmRow = v
+        case .press: tmPress = v
+        }
+    }
+    
+    private func applyTMProgressionForNewCycle(from oldCycle: Int) {
+        let liftsToProgress = activeLifts  // only what the program actually used
+
+        if tmProgStyleRaw == "classic" {
+            for lift in liftsToProgress {
+                let bumped = getTM(lift) + classicBumpAmount(for: lift)
+                setTM(lift, bumped)
+            }
+            return
+        }
+
+        // AUTO progression
+        for lift in liftsToProgress {
+            // Best est-1RM recorded THIS cycle for this lift
+            let best = PRStore.shared.bestByCycle[PRKey(cycle: oldCycle, lift: lift.label)] ?? 0
+            guard best > 0 else { continue } // nothing to update if no AMRAPs logged
+
+            let targetTM = (Double(best) * 0.90).rounded() // 90% rule
+            let currentTM = getTM(lift)
+
+            // Cap the increase per cycle
+            let maxUp = autoMaxDelta(for: lift)
+            let delta = min(max(targetTM - currentTM, 0), maxUp)
+
+            setTM(lift, currentTM + delta)
+        }
+    }
+    
     private var oneRMFormula: OneRepMaxFormula {
         switch oneRMFormulaRaw.lowercased() {
         case "epley":    return .epley
@@ -157,6 +226,12 @@ struct ContentView: View {
                         notesFocused = false
                     }
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showPRsSheet = true } label: {
+                        Image(systemName: "trophy.fill")
+                    }
+                    .accessibilityLabel("PRs")
+                }
             }
         }
         .sheet(isPresented: $showSettings) {
@@ -197,6 +272,10 @@ struct ContentView: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
                 .interactiveDismissDisabled(false)
+        }
+        .sheet(isPresented: $showPRsSheet) {
+            PRsSheet(currentCycle: currentCycle, lifts: activeLifts)
+                .presentationDetents([.medium, .large])
         }
         .alert("Reset current lift?", isPresented: $showResetConfirm) {
             Button("Reset", role: .destructive) { resetCurrentLift() }
@@ -274,7 +353,8 @@ struct ContentView: View {
                 expanded: $showPRs,
                 tm: tmSelected,
                 rounder: { calculator.round($0) },
-                label: selectedLift.label
+                label: selectedLift.label,
+                currentCycle: currentCycle 
             )
 
             WorkoutBlock(
@@ -311,7 +391,8 @@ struct ContentView: View {
                 armTimers: armTimers,
                 isWorkoutFinished: isWorkoutFinished,
                 currentFormula: oneRMFormula,
-                availableLifts: activeLifts
+                availableLifts: activeLifts,
+                currentCycle: currentCycle
             )
 
             AssistanceBlock(
@@ -566,24 +647,33 @@ struct ContentView: View {
             PRStore.shared.considerPR(cycle: currentCycle, lift: selectedLift.label, est1RM: Int(metrics.est.rounded()))
         }
 
-        // Mark finished
+        // Mark finished & persist
         workoutState.markWorkoutFinished(lift: selectedLift.rawValue, week: currentWeek)
         workoutState.markLiftComplete(selectedLift.rawValue, week: currentWeek)
 
         timer.reset()
         workoutNotes = ""
 
+        // Auto advance
         if autoAdvanceWeek {
+            // mark this lift done for the current week
+            workoutState.markLiftComplete(selectedLift.rawValue, week: currentWeek)
+
             if workoutState.allLiftsComplete(for: currentWeek, totalLifts: activeLifts.count) {
-                if currentWeek < 4 {
-                    currentWeek += 1
-                } else {
-                    currentWeek = 1
+                if currentWeek == 4 {
+                    // wrap to Week 1 and bump the cycle
+                    let oldCycle = currentCycle
                     currentCycle += 1
-                    // (Optional) adjust TMs here if you want classic progression
+                    currentWeek = 1
+                    workoutState.resetCompletedLifts(for: currentWeek)
+                    savedAlertText += "\nCycle \(oldCycle) complete — advancing to Cycle \(currentCycle), Week 1!"
+                    // (Optional: apply TM progression here if you want; we can do this in Pass C.)
+                } else {
+                    // simple week +1
+                    currentWeek += 1
+                    workoutState.resetCompletedLifts(for: currentWeek)
+                    savedAlertText += "\nAll lifts complete — advancing to Week \(currentWeek)!"
                 }
-                workoutState.resetCompletedLifts(for: currentWeek)
-                savedAlertText += "\nAdvancing to Week \(currentWeek)."
             }
         }
 

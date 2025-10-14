@@ -69,10 +69,13 @@ public struct AMRAPRow: View {
     
     // ✅ NEW: carry the chosen formula down to the row
     public let currentFormula: OneRepMaxFormula
+    
+    public let liftLabel: String
+    public let currentCycle: Int
 
     @State private var lastKnownDone: Bool = false
 
-    public init(label: String, weight: Double, perSide: [Double], done: Binding<Bool>, reps: Binding<String>, est1RM: Double, capNote: String? = nil, onCheck: ((Bool) -> Void)? = nil, focus: FocusState<Bool>.Binding, refreshID: String = "", currentFormula: OneRepMaxFormula) {
+    public init(label: String, weight: Double, perSide: [Double], done: Binding<Bool>, reps: Binding<String>, est1RM: Double, capNote: String? = nil, onCheck: ((Bool) -> Void)? = nil, focus: FocusState<Bool>.Binding, refreshID: String = "", currentFormula: OneRepMaxFormula,liftLabel: String, currentCycle: Int) {
         self.label = label
         self.weight = weight
         self.perSide = perSide
@@ -84,6 +87,8 @@ public struct AMRAPRow: View {
         self.focus = focus
         self.refreshID = refreshID
         self.currentFormula = currentFormula
+        self.liftLabel = liftLabel
+        self.currentCycle = currentCycle
     }
 
     public var body: some View {
@@ -125,9 +130,18 @@ public struct AMRAPRow: View {
                     Spacer()
                     VStack(alignment: .trailing, spacing: 2) {
                         if est1RM > 0 {
-                            Text("Est 1RM ≈ \(Int(est1RM)) lb")
-                                .font(.subheadline)
-                            FormulaTag(formula: currentFormula) // ✅ uses stored prop
+                            HStack(spacing: 6) {
+                                Text("Est 1RM ≈ \(Int(est1RM)) lb")
+                                    .font(.subheadline)
+                                if est1RM > 0 {
+                                    if allTimePRBeaten {
+                                        PRPill("All-Time PR")
+                                    } else if cyclePRBeaten {
+                                        PRPill("PR")
+                                    }
+                                }
+                            }
+                            FormulaTag(formula: currentFormula)
                                 .foregroundStyle(.blue)
                         }
                         if let note = capNote, !note.isEmpty {
@@ -157,6 +171,28 @@ public struct AMRAPRow: View {
         .task(id: refreshID) {
             lastKnownDone = done
         }
+    }
+    
+    private var cyclePRBeaten: Bool {
+        let best = PRStore.shared.bestByCycle[PRKey(cycle: currentCycle, lift: liftLabel)] ?? 0
+        return Int(est1RM.rounded()) > best
+    }
+    private var allTimePRBeaten: Bool {
+        let best = PRStore.shared.bestAllTime[liftLabel] ?? 0
+        return Int(est1RM.rounded()) > best
+    }
+}
+
+private struct PRPill: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View {
+        Text(text)
+            .font(.caption.bold())
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(.thinMaterial, in: Capsule())
+            .overlay(Capsule().stroke(Color.secondary.opacity(0.25), lineWidth: 1))
+            .accessibilityLabel(text)
     }
 }
 

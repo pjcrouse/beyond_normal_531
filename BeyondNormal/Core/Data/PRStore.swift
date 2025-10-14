@@ -45,3 +45,34 @@ final class PRStore {
         let allTime: [String: Int]
     }
 }
+
+// MARK: - Public convenience APIs used by Settings / PRs UI
+
+extension PRStore {
+    /// Remove all PRs recorded for a specific cycle, then save.
+    func resetCycle(_ cycle: Int) {
+        // Drop any entries whose key.cycle matches
+        bestByCycle.keys
+            .filter { $0.cycle == cycle }
+            .forEach { bestByCycle.removeValue(forKey: $0) }
+
+        // Rebuild the all-time cache from by-cycle values
+        recomputeCachesIfNeeded()
+    }
+
+    /// Back-compat for call sites that used a labeled parameter.
+    func resetCycle(currentCycle: Int) {
+        resetCycle(currentCycle)
+    }
+
+    /// Rebuilds `bestAllTime` from `bestByCycle` and persists.
+    /// (No dependency on WorkoutStore needed.)
+    func recomputeCachesIfNeeded() {
+        var all: [String: Int] = [:]
+        for (key, val) in bestByCycle {
+            all[key.lift] = max(all[key.lift] ?? 0, val)
+        }
+        bestAllTime = all
+        persist()
+    }
+}

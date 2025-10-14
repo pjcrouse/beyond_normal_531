@@ -43,6 +43,8 @@ struct WorkoutBlock: View {
 
     // ✅ NEW: dynamic list of lifts (3/4/5 day)
     let availableLifts: [Lift]
+    
+    let currentCycle: Int
 
     var body: some View {
         let scheme = program.weekScheme(for: currentWeek)
@@ -169,7 +171,9 @@ struct WorkoutBlock: View {
                 },
                 focus: amrapFocused,
                 refreshID: refreshID,
-                currentFormula: currentFormula
+                currentFormula: currentFormula,
+                liftLabel: selectedLift.label,
+                currentCycle: currentCycle
             )
         } else {
             SetRow(
