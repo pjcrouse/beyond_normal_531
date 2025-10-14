@@ -72,6 +72,13 @@ struct ContentView: View {
 
     // Library for assistance lookup (still needed for selected exercise resolution)
     @EnvironmentObject private var assistanceLibrary: AssistanceLibrary
+    
+    @State private var prService = PRService()
+    @StateObject private var awardStore = AwardStore()
+
+    // If you already store the user’s display name somewhere, use that.
+    // For now, a placeholder:
+    @AppStorage("user_display_name") private var userDisplayName: String = "PAT"
 
     private var isUpper: (Lift) -> Bool { { $0 == .bench || $0 == .press || $0 == .row } }
     private var isLower: (Lift) -> Bool { { $0 == .squat || $0 == .deadlift } }
@@ -662,7 +669,7 @@ struct ContentView: View {
         )
         WorkoutStore.shared.append(entry)
 
-        // Consider PR from AMRAP estimate
+        // --- Update PR stats used in your existing PRs view ---
         if metrics.est > 0 {
             PRStore.shared.considerPR(
                 cycle: currentCycle,
@@ -671,7 +678,46 @@ struct ContentView: View {
             )
         }
 
-        // Mark finished in state
+        // --- Award trigger (on TRUE PR vs historical best) ---
+        // Map UI Lift -> LiftType (Awards model)
+        let liftType: LiftType = {
+            switch selectedLift {
+            case .deadlift: return .deadlift
+            case .squat:    return .squat
+            case .bench:    return .bench
+            case .row:      return .row
+            case .press:    return .press
+            }
+        }()
+
+        // Recreate the exact top-set weight & reps that fed your e1RM
+        let scheme = program.weekScheme(for: currentWeek)
+        let tmSel  = tmFor(selectedLift)
+        let top    = scheme.main[2]                       // AMRAP set
+        let topW   = calculator.round(tmSel * top.pct)
+        let reps   = workoutState.getAMRAP(lift: selectedLift.rawValue, week: currentWeek)
+
+        if let pr = prService.updateIfPR(
+            entry: .init(lift: liftType, weightLB: topW, reps: reps, date: .now),
+            metric: .estimatedOneRM,        // use .oneRM if you only award true singles
+            formula: .epley                 // or map to your user-selected formula
+        ) {
+            #if DEBUG
+            print("🎉 New PR for \(pr.lift): \(Int(pr.value.rounded())) e1RM on \(pr.date)")
+            #endif
+
+            // Actually create & persist the medal images + record
+            Task { @MainActor in
+                let name = userDisplayName.isEmpty ? "PAT" : userDisplayName
+                await AwardGenerator.shared.createAndStoreAward(
+                    for: pr,
+                    userDisplayName: name,
+                    store: awardStore
+                )
+            }
+        }
+
+        // --- Mark finished in state ---
         workoutState.markWorkoutFinished(lift: selectedLift.rawValue, week: currentWeek)
         workoutState.markLiftComplete(selectedLift.rawValue, week: currentWeek)
 
@@ -679,44 +725,33 @@ struct ContentView: View {
         timer.reset()
         workoutNotes = ""
 
-        // Auto advance logic
+        // --- Auto advance logic (unchanged) ---
         if autoAdvanceWeek {
-            // (already marked this lift complete above)
             if workoutState.allLiftsComplete(for: currentWeek, totalLifts: activeLifts.count) {
                 if currentWeek == 4 {
-                    // ---- End of cycle: roll to Week 1 of next cycle + apply TM progression ----
                     let oldCycle = currentCycle
                     currentCycle += 1
                     currentWeek = 1
                     workoutState.resetCompletedLifts(for: currentWeek)
 
-                    // Capture old TMs for summary
-                    let oldSQ = tmSquat
-                    let oldBP = tmBench
-                    let oldDL = tmDeadlift
-                    let oldRW = tmRow
-                    let oldPR = tmPress
+                    let oldSQ = tmSquat, oldBP = tmBench, oldDL = tmDeadlift, oldRW = tmRow, oldPR = tmPress
 
-                    // Apply TM progression at cycle rollover
                     var tms = TMSet(squat: tmSquat, bench: tmBench, deadlift: tmDeadlift, row: tmRow, press: tmPress)
                     let style = TMProgressionStyle(rawValue: tmProgStyleRaw.lowercased()) ?? .classic
                     switch style {
                     case .classic:
                         applyClassic(&tms, active: activeLifts)
                     case .auto:
-                        // You can restrict to “last cycle” entries if you want, but whole history works too.
                         let recent = WorkoutStore.shared.load()
-                        applyAuto(&tms, active: activeLifts, entries: recent)  // uses your caps/floors
+                        applyAuto(&tms, active: activeLifts, entries: recent)
                     }
 
-                    // Persist progressed TMs (rounded to your increment)
                     tmSquat    = LoadRounder.round(tms.squat,    to: roundTo)
                     tmBench    = LoadRounder.round(tms.bench,    to: roundTo)
                     tmDeadlift = LoadRounder.round(tms.deadlift, to: roundTo)
                     tmRow      = LoadRounder.round(tms.row,      to: roundTo)
                     tmPress    = LoadRounder.round(tms.press,    to: roundTo)
 
-                    // Append a concise delta summary (only for lifts in use this cycle)
                     var lines: [String] = []
                     if activeLifts.contains(.squat) {
                         let d = Int(tmSquat.rounded()) - Int(oldSQ.rounded())
@@ -744,7 +779,6 @@ struct ContentView: View {
                         savedAlertText += "\n\nNext-cycle TMs:\n" + lines.joined(separator: "\n")
                     }
                 } else {
-                    // ---- Mid-cycle: just advance the week ----
                     currentWeek += 1
                     workoutState.resetCompletedLifts(for: currentWeek)
                     savedAlertText += "\nAll lifts complete — advancing to Week \(currentWeek)!"
