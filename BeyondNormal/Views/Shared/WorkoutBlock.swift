@@ -45,6 +45,8 @@ struct WorkoutBlock: View {
     let availableLifts: [Lift]
     
     let currentCycle: Int
+    
+    let startRest: (Int, Bool) -> Void
 
     var body: some View {
         let scheme = program.weekScheme(for: currentWeek)
@@ -57,7 +59,7 @@ struct WorkoutBlock: View {
             warmupLink(tm: tm, scheme: scheme)
             mainSets(tm: tm, scheme: scheme, refreshID: refreshID)
             NotesField(text: $workoutNotes, focused: notesFocused)
-            RestTimerCard(timer: timer, regular: timerRegularSec, bbb: timerBBBsec)
+            RestTimerCard(timer: timer, regular: timerRegularSec, bbb: timerBBBsec, startRest: startRest)
             bbbSets(tm: tm, scheme: scheme, refreshID: refreshID)
         }
         .cardStyle()
@@ -122,10 +124,7 @@ struct WorkoutBlock: View {
             perSide: calculator.plates(target: w0),
             done: setBinding(1),
             onCheck: { checked in
-                if checked && !isWorkoutFinished {
-                    armTimers()
-                    timer.start(seconds: timerRegularSec)
-                }
+                if checked && !isWorkoutFinished { startRest(timerRegularSec, true) }
             },
             refreshID: refreshID
         )
@@ -136,10 +135,7 @@ struct WorkoutBlock: View {
             perSide: calculator.plates(target: w1),
             done: setBinding(2),
             onCheck: { checked in
-                if checked && !isWorkoutFinished {
-                    armTimers()
-                    timer.start(seconds: timerRegularSec)
-                }
+                if checked && !isWorkoutFinished { startRest(timerRegularSec, true) }
             },
             refreshID: refreshID
         )
@@ -164,10 +160,7 @@ struct WorkoutBlock: View {
                 est1RM: r.e1RM,
                 capNote: capText,
                 onCheck: { checked in
-                    if checked && !isWorkoutFinished {
-                        armTimers()
-                        timer.start(seconds: timerRegularSec)
-                    }
+                    if checked && !isWorkoutFinished { startRest(timerRegularSec, true) }
                 },
                 focus: amrapFocused,
                 refreshID: refreshID,
@@ -182,10 +175,7 @@ struct WorkoutBlock: View {
                 perSide: calculator.plates(target: w2),
                 done: setBinding(3),
                 onCheck: { checked in
-                    if checked && !isWorkoutFinished {
-                        armTimers()
-                        timer.start(seconds: timerRegularSec)
-                    }
+                    if checked && !isWorkoutFinished { startRest(timerRegularSec, true) }
                 },
                 refreshID: refreshID
             )
@@ -278,10 +268,7 @@ struct WorkoutBlock: View {
                         ),
                     roundTo: roundTo,
                     onCheck: { checked in
-                        if checked && !isWorkoutFinished {
-                            armTimers()
-                            timer.start(seconds: timerBBBsec)
-                        }
+                        if checked && !isWorkoutFinished { startRest(timerBBBsec, true) }
                     },
                     refreshID: refreshID
                 )

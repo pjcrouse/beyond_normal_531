@@ -5,6 +5,9 @@ struct RestTimerCard: View {
     let regular: Int
     let bbb: Int
 
+    // ✅ Inject the gated starter from ContentView
+    let startRest: (Int, /*fromUser*/ Bool) -> Void
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -19,14 +22,19 @@ struct RestTimerCard: View {
                 .font(.system(size: 34, weight: .bold, design: .rounded))
 
             HStack(spacing: 12) {
-                Button { timer.start(seconds: regular) } label: { Label("Start Regular", systemImage: "timer") }
-                Button { timer.start(seconds: bbb) } label: { Label("Start BBB", systemImage: "timer") }
+                Button { startRest(regular, true) } { Label("Start Regular", systemImage: "timer") }
+                Button { startRest(bbb,     true) } { Label("Start BBB",     systemImage: "timer") }
             }
             .buttonStyle(.bordered)
 
             HStack(spacing: 12) {
                 Button(timer.isRunning ? "Pause" : "Resume") {
-                    if timer.isRunning { timer.pause() } else { timer.start(seconds: max(timer.remaining, 1)) }
+                    if timer.isRunning {
+                        timer.pause()
+                    } else {
+                        // Resume is still a *user* action — allow through the gate
+                        startRest(max(timer.remaining, 1), true)
+                    }
                 }
                 .buttonStyle(.bordered)
 

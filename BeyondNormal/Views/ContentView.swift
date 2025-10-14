@@ -392,7 +392,10 @@ struct ContentView: View {
                 isWorkoutFinished: isWorkoutFinished,
                 currentFormula: oneRMFormula,
                 availableLifts: activeLifts,
-                currentCycle: currentCycle
+                currentCycle: currentCycle,
+                startRest: { secs, fromUser in
+                    startRest(secs, fromUser: fromUser)
+                }
             )
 
             AssistanceBlock(
@@ -422,7 +425,10 @@ struct ContentView: View {
                     if !timer.allowStarts { timer.allowStarts = true }
                 },
                 isWorkoutFinished: isWorkoutFinished,
-                tmFor: { lift in tmFor(lift) }
+                tmFor: { lift in tmFor(lift) },
+                startRest: { secs, fromUser in
+                    startRest(secs, fromUser: fromUser)
+                }
             )
 
             SummaryCard(
@@ -448,19 +454,32 @@ struct ContentView: View {
     // MARK: - Subviews
 
     private var headerView: some View {
-        Group {
-            if UIImage(named: "BeyondNormalLogo") != nil {
-                Image("BeyondNormalLogo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: 220)
-                    .accessibilityLabel("Beyond Normal")
-            } else {
-                Text("Beyond Normal")
-                    .font(.largeTitle.weight(.bold))
-                    .padding(.horizontal)
+        VStack(spacing: 6) {
+            Group {
+                if UIImage(named: "BeyondNormalLogo") != nil {
+                    Image("BeyondNormalLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: 220)
+                        .accessibilityLabel("Beyond Normal")
+                } else {
+                    Text("Beyond Normal")
+                        .font(.largeTitle.weight(.bold))
+                }
             }
+
+            // Cycle • Week chip (read-only; picker stays in WorkoutBlock)
+            Text("Cycle \(currentCycle) • Week \(currentWeek)")
+                .font(.caption)
+                .monospacedDigit()
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule().fill(Color.secondary.opacity(0.15))
+                )
+                .accessibilityLabel("Cycle \(currentCycle), Week \(currentWeek)")
         }
+        .padding(.horizontal)
     }
 
     private var finishButton: some View {
@@ -629,6 +648,7 @@ struct ContentView: View {
             metrics.totalVol.formatted(.number)
         )
 
+        // Save entry (now including week/cycle)
         let entry = WorkoutEntry(
             date: .now,
             lift: selectedLift.label,
@@ -642,34 +662,89 @@ struct ContentView: View {
         )
         WorkoutStore.shared.append(entry)
 
-        // Update PRs if we got an estimate
+        // Consider PR from AMRAP estimate
         if metrics.est > 0 {
-            PRStore.shared.considerPR(cycle: currentCycle, lift: selectedLift.label, est1RM: Int(metrics.est.rounded()))
+            PRStore.shared.considerPR(
+                cycle: currentCycle,
+                lift: selectedLift.label,
+                est1RM: Int(metrics.est.rounded())
+            )
         }
 
-        // Mark finished & persist
+        // Mark finished in state
         workoutState.markWorkoutFinished(lift: selectedLift.rawValue, week: currentWeek)
         workoutState.markLiftComplete(selectedLift.rawValue, week: currentWeek)
 
+        // Reset timers and clear notes field
         timer.reset()
         workoutNotes = ""
 
-        // Auto advance
+        // Auto advance logic
         if autoAdvanceWeek {
-            // mark this lift done for the current week
-            workoutState.markLiftComplete(selectedLift.rawValue, week: currentWeek)
-
+            // (already marked this lift complete above)
             if workoutState.allLiftsComplete(for: currentWeek, totalLifts: activeLifts.count) {
                 if currentWeek == 4 {
-                    // wrap to Week 1 and bump the cycle
+                    // ---- End of cycle: roll to Week 1 of next cycle + apply TM progression ----
                     let oldCycle = currentCycle
                     currentCycle += 1
                     currentWeek = 1
                     workoutState.resetCompletedLifts(for: currentWeek)
+
+                    // Capture old TMs for summary
+                    let oldSQ = tmSquat
+                    let oldBP = tmBench
+                    let oldDL = tmDeadlift
+                    let oldRW = tmRow
+                    let oldPR = tmPress
+
+                    // Apply TM progression at cycle rollover
+                    var tms = TMSet(squat: tmSquat, bench: tmBench, deadlift: tmDeadlift, row: tmRow, press: tmPress)
+                    let style = TMProgressionStyle(rawValue: tmProgStyleRaw.lowercased()) ?? .classic
+                    switch style {
+                    case .classic:
+                        applyClassic(&tms, active: activeLifts)
+                    case .auto:
+                        // You can restrict to “last cycle” entries if you want, but whole history works too.
+                        let recent = WorkoutStore.shared.load()
+                        applyAuto(&tms, active: activeLifts, entries: recent)  // uses your caps/floors
+                    }
+
+                    // Persist progressed TMs (rounded to your increment)
+                    tmSquat    = LoadRounder.round(tms.squat,    to: roundTo)
+                    tmBench    = LoadRounder.round(tms.bench,    to: roundTo)
+                    tmDeadlift = LoadRounder.round(tms.deadlift, to: roundTo)
+                    tmRow      = LoadRounder.round(tms.row,      to: roundTo)
+                    tmPress    = LoadRounder.round(tms.press,    to: roundTo)
+
+                    // Append a concise delta summary (only for lifts in use this cycle)
+                    var lines: [String] = []
+                    if activeLifts.contains(.squat) {
+                        let d = Int(tmSquat.rounded()) - Int(oldSQ.rounded())
+                        lines.append("Squat: \(Int(oldSQ.rounded())) → \(Int(tmSquat.rounded())) \(d >= 0 ? "↑" : "↓")\(abs(d))")
+                    }
+                    if activeLifts.contains(.bench) {
+                        let d = Int(tmBench.rounded()) - Int(oldBP.rounded())
+                        lines.append("Bench: \(Int(oldBP.rounded())) → \(Int(tmBench.rounded())) \(d >= 0 ? "↑" : "↓")\(abs(d))")
+                    }
+                    if activeLifts.contains(.deadlift) {
+                        let d = Int(tmDeadlift.rounded()) - Int(oldDL.rounded())
+                        lines.append("Deadlift: \(Int(oldDL.rounded())) → \(Int(tmDeadlift.rounded())) \(d >= 0 ? "↑" : "↓")\(abs(d))")
+                    }
+                    if activeLifts.contains(.row) {
+                        let d = Int(tmRow.rounded()) - Int(oldRW.rounded())
+                        lines.append("Row: \(Int(oldRW.rounded())) → \(Int(tmRow.rounded())) \(d >= 0 ? "↑" : "↓")\(abs(d))")
+                    }
+                    if activeLifts.contains(.press) {
+                        let d = Int(tmPress.rounded()) - Int(oldPR.rounded())
+                        lines.append("Press: \(Int(oldPR.rounded())) → \(Int(tmPress.rounded())) \(d >= 0 ? "↑" : "↓")\(abs(d))")
+                    }
+
                     savedAlertText += "\nCycle \(oldCycle) complete — advancing to Cycle \(currentCycle), Week 1!"
-                    // (Optional: apply TM progression here if you want; we can do this in Pass C.)
+                    if !lines.isEmpty {
+                        savedAlertText += "\n\nNext-cycle TMs:\n" + lines.joined(separator: "\n")
+                    }
                 } else {
-                    // simple week +1
+                    // ---- Mid-cycle: just advance the week ----
                     currentWeek += 1
                     workoutState.resetCompletedLifts(for: currentWeek)
                     savedAlertText += "\nAll lifts complete — advancing to Week \(currentWeek)!"
@@ -687,5 +762,21 @@ struct ContentView: View {
                 center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
             }
         }
+    }
+    
+    private func tmChangeLine(_ name: String, _ old: Double, _ new: Double) -> String {
+        let d = Int(new.rounded()) - Int(old.rounded())
+        let arrow = d >= 0 ? "↑" : "↓"
+        return "\(name): \(Int(old.rounded())) → \(Int(new.rounded())) \(arrow)\(abs(d))"
+    }
+
+    private func startRest(_ seconds: Int, fromUser: Bool) {
+        // Only arm on user action
+        if fromUser {
+            armTimers() // sets allowTimerStarts = true and timer.allowStarts = true
+        }
+        // Never start unless both gates are open
+        guard allowTimerStarts, timer.allowStarts else { return }
+        timer.start(seconds: seconds)
     }
 }

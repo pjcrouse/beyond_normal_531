@@ -30,6 +30,8 @@ struct AssistanceBlock: View {
 
     // NEW: access to training maxes
     let tmFor: (Lift) -> Double
+    
+    let startRest: (Int, Bool) -> Void
 
     var body: some View {
         let scheme = program.weekScheme(for: currentWeek)
@@ -213,10 +215,7 @@ struct AssistanceBlock: View {
                             : [],
                         roundTo: roundTo,
                         onCheck: { checked in
-                            if checked && !isWorkoutFinished {
-                                armTimers()
-                                if allowTimerStarts { timer.start(seconds: timerBBBsec) }
-                            }
+                            if checked && !isWorkoutFinished {startRest(timerBBBsec, true) }
                         },
                         refreshID: refreshID
                     )
