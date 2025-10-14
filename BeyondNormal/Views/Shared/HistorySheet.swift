@@ -14,6 +14,8 @@ struct HistorySheet: View {
 
     // ✅ New: filter state (nil = All)
     @State private var selectedFilter: Lift? = nil
+    
+    @State private var pwResult: ProgramWeekSummaryResult?
 
     var body: some View {
         NavigationStack {
@@ -127,6 +129,17 @@ struct HistorySheet: View {
                     } label: { Image(systemName: "calendar.badge.checkmark") }
                     .accessibilityLabel("Weekly Summary")
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        let result = computeProgramWeekSummary(
+                            cycle: currentCycle,
+                            programWeek: currentProgramWeek,
+                            entries: WorkoutStore.shared.load()
+                        )
+                        pwResult = result
+                    } label: { Image(systemName: "number.square") } // looks like “week”
+                    .accessibilityLabel("Program Week Summary")
+                }
             }
             .onAppear {
                 entries = WorkoutStore.shared.load().sorted { $0.date > $1.date }
@@ -137,6 +150,10 @@ struct HistorySheet: View {
                     preferredOrder: availableLifts.map { $0.label }   // ✅ pass program order
                 )
                 .presentationDetents([.medium, .large])
+            }
+            .sheet(item: $pwResult) { r in
+                ProgramWeekSummarySheet(result: r)
+                    .presentationDetents([.medium, .large])
             }
         }
     }
