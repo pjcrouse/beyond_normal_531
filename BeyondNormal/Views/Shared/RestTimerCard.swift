@@ -6,7 +6,7 @@ struct RestTimerCard: View {
     let bbb: Int
 
     // ✅ Inject the gated starter from ContentView
-    let startRest: (Int, /*fromUser*/ Bool) -> Void
+    let startRest: (Int, Bool) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -18,12 +18,17 @@ struct RestTimerCard: View {
             }
 
             Text(timer.remaining > 0 ? mmss(timer.remaining)
-                    : "Ready (\(mmss(regular)) / \(mmss(bbb)))")
+                 : "Ready (\(mmss(regular)) / \(mmss(bbb)))")
                 .font(.system(size: 34, weight: .bold, design: .rounded))
 
             HStack(spacing: 12) {
-                Button { startRest(regular, true) } { Label("Start Regular", systemImage: "timer") }
-                Button { startRest(bbb,     true) } { Label("Start BBB",     systemImage: "timer") }
+                Button {
+                    startRest(regular, true)        // ✅ user-initiated
+                } label: { Label("Start Regular", systemImage: "timer") }
+
+                Button {
+                    startRest(bbb, true)            // ✅ user-initiated
+                } label: { Label("Start BBB", systemImage: "timer") }
             }
             .buttonStyle(.bordered)
 
@@ -32,14 +37,16 @@ struct RestTimerCard: View {
                     if timer.isRunning {
                         timer.pause()
                     } else {
-                        // Resume is still a *user* action — allow through the gate
-                        startRest(max(timer.remaining, 1), true)
+                        // Resume is user-initiated too; keep it gated
+                        startRest(max(timer.remaining, 1), true)  // ✅ user-initiated
                     }
                 }
                 .buttonStyle(.bordered)
 
-                Button("Reset", role: .destructive) { timer.reset() }
-                    .buttonStyle(.bordered)
+                Button("Reset", role: .destructive) {
+                    timer.reset()
+                }
+                .buttonStyle(.bordered)
             }
         }
         .padding()
@@ -48,7 +55,6 @@ struct RestTimerCard: View {
 }
 
 private func mmss(_ s: Int) -> String {
-    let m = s / 60
-    let r = s % 60
+    let m = s / 60, r = s % 60
     return String(format: "%d:%02d", m, r)
 }
