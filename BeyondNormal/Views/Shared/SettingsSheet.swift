@@ -28,6 +28,9 @@ struct SettingsSheet: View {
     @Binding var workoutsPerWeek: Int        // 3, 4, or 5
     @Binding var fourthLiftRaw: String       // "row" | "press"
 
+    // User profile
+    @Binding var userDisplayName: String
+
     // Temp strings for numeric fields
     @State private var tmpSquat = ""
     @State private var tmpBench = ""
@@ -49,6 +52,7 @@ struct SettingsSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                profileSection
                 trainingMaxesSection
                 workoutsPerWeekSection
                 loadingSection
@@ -85,6 +89,22 @@ struct SettingsSheet: View {
     }
 
     // MARK: - Sections (split for compiler sanity)
+
+    private var profileSection: some View {
+        Section("Profile") {
+            HStack {
+                Text("Display Name")
+                Spacer()
+                TextField("Your name", text: $userDisplayName)
+                    .multilineTextAlignment(.trailing)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.words)
+            }
+            Text("Your name appears on PR award medals. Leave blank to use default.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
 
     private var trainingMaxesSection: some View {
         Section("Training Maxes (lb)") {

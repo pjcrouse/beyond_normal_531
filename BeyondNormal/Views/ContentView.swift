@@ -78,7 +78,7 @@ struct ContentView: View {
 
     // If you already store the user’s display name somewhere, use that.
     // For now, a placeholder:
-    @AppStorage("user_display_name") private var userDisplayName: String = "PAT"
+    @AppStorage("user_display_name") private var userDisplayName: String = ""
 
     private var isUpper: (Lift) -> Bool { { $0 == .bench || $0 == .press || $0 == .row } }
     private var isLower: (Lift) -> Bool { { $0 == .squat || $0 == .deadlift } }
@@ -262,7 +262,8 @@ struct ContentView: View {
                 assistRowID: $assistRowID,
                 assistPressID: $assistPressID,
                 workoutsPerWeek: $workoutsPerWeek,
-                fourthLiftRaw: $fourthLiftRaw
+                fourthLiftRaw: $fourthLiftRaw,
+                userDisplayName: $userDisplayName
             )
             .presentationDetents([.medium, .large])
         }
@@ -362,7 +363,7 @@ struct ContentView: View {
                 tm: tmSelected,
                 rounder: { calculator.round($0) },
                 label: selectedLift.label,
-                currentCycle: currentCycle 
+                currentCycle: currentCycle
             )
 
             WorkoutBlock(
@@ -575,7 +576,7 @@ struct ContentView: View {
         case .bench:    assistWeightBench = 65
         case .deadlift: assistWeightDeadlift = 0
         case .row:      assistWeightRow = 0
-        case .press:    assistWeightBench = 65 
+        case .press:    assistWeightBench = 65
         }
     }
 
@@ -712,10 +713,11 @@ struct ContentView: View {
 
             // Actually create & persist the medal images + record
             Task { @MainActor in
-                let name = userDisplayName.isEmpty ? "PAT" : userDisplayName
+                let name = userDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+                let displayName = name.isEmpty ? "CHAMPION" : name
                 await AwardGenerator.shared.createAndStoreAward(
                     for: pr,
-                    userDisplayName: name,
+                    userDisplayName: displayName,
                     store: awardStore
                 )
             }
