@@ -56,13 +56,12 @@ struct AwardDetailView: View {
             Color.black.ignoresSafeArea()
 
             VStack(spacing: 20) {
-                // 👇 This is the new interactive medal
-                InteractiveMedalFlipView(award: award)
-                    .frame(width: 300, height: 300)
-                    .padding(.top, 40)
+                Medal3DView(award: award)
+                    .frame(maxWidth: 420, maxHeight: 420)
+                    .padding(.top, 20)
 
                 Text(award.title)
-                    .font(.title2.bold())
+                    .font(.title3.bold())
                     .foregroundStyle(.white)
 
                 Text(award.date.formatted(date: .abbreviated, time: .omitted))
@@ -70,16 +69,6 @@ struct AwardDetailView: View {
                     .foregroundStyle(.secondary)
             }
             .padding()
-        }
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                VStack {
-                    Text(award.title).font(.headline)
-                    Text(award.date.formatted(date: .abbreviated, time: .omitted))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
         }
     }
 }

@@ -71,4 +71,9 @@ final class AwardGenerator {
         }
         return nil
     }
+    
+    func resolveUIImage(_ relative: String) -> UIImage? {
+        let url = awardsDir.appendingPathComponent(relative)
+        return UIImage(contentsOfFile: url.path)
+    }
 }
