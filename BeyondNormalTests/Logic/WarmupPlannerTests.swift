@@ -134,27 +134,45 @@ final class WarmupPlannerTests: XCTestCase {
     // MARK: - Rep Scheme Tests
     
     func testRepSchemeBasedOnPercentage() {
-        // Rep schemes should decrease as weight increases
-        let plan = buildWarmupPlan(target: 315, bar: standardBar, roundTo: roundTo, lift: .squat)
-        
-        // First set (bar) should be 10 reps
-        XCTAssertEqual(plan.first?.reps, 10)
-        
-        // As we get closer to target, reps should decrease
-        var prevPct: Double = 0
-        for step in plan {
-            let pct = step.weight / 315.0
-            
-            // Verify rep counts make sense for the percentage
-            if pct < 0.60 {
-                XCTAssertGreaterThanOrEqual(step.reps, 5, "Light weights should have 5+ reps")
-            } else if pct < 0.75 {
-                XCTAssertGreaterThanOrEqual(step.reps, 3, "Medium weights should have 3+ reps")
-            } else if pct < 0.87 {
-                XCTAssertGreaterThanOrEqual(step.reps, 1, "Heavy weights should have 1+ reps")
+        let target: Double = 315
+        let plan = buildWarmupPlan(target: target, bar: standardBar, roundTo: roundTo, lift: .squat)
+
+        // Sanity
+        XCTAssertFalse(plan.isEmpty, "Plan should not be empty")
+
+        var prevWeight = -Double.infinity
+        var prevReps = Int.max
+
+        for (idx, step) in plan.enumerated() {
+            // Weights must strictly increase and remain < target (exclusive ramp)
+            XCTAssertGreaterThan(step.weight, prevWeight, "Weights should increase monotonically")
+            XCTAssertLessThan(step.weight, target, "Warmup step must be < target")
+
+            if idx == 0 {
+                // First set is always the bar ×10
+                XCTAssertEqual(step.weight, standardBar, accuracy: roundTo, "First set should be the bar")
+                XCTAssertEqual(step.reps, 10, "First (bar) set should be 10 reps")
+            } else {
+                // Reps should not increase as weight rises
+                XCTAssertLessThanOrEqual(step.reps, prevReps, "Reps should not increase with weight")
+
+                // Band mapping for *non-bar* warmups:
+                // <60% → 8, 60–75% → 5, 75–87% → 3, ≥87% → 1
+                let pct = step.weight / target
+                switch pct {
+                case ..<0.60:
+                    XCTAssertEqual(step.reps, 8, "Light (<60%) should be 8 reps")
+                case 0.60..<0.75:
+                    XCTAssertEqual(step.reps, 5, "Medium (60–75%) should be 5 reps")
+                case 0.75..<0.87:
+                    XCTAssertEqual(step.reps, 3, "Heavy (75–87%) should be 3 reps")
+                default:
+                    XCTAssertEqual(step.reps, 1, "Very heavy (≥87%) should be 1 rep")
+                }
             }
-            
-            prevPct = pct
+
+            prevWeight = step.weight
+            prevReps = step.reps
         }
     }
     

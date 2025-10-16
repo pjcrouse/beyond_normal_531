@@ -167,7 +167,7 @@ struct HistorySheet: View {
 
     private var filterBar: some View {
         // Builds ["All", "Squat", "Bench", ...] from availableLifts
-        let options: [Lift?] = [nil] + availableLifts
+        let _: [Lift?] = [nil] + availableLifts
 
         return Picker("Filter", selection: $selectedFilter) {
             Text("All").tag(Optional<Lift>.none)
