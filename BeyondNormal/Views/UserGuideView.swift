@@ -127,7 +127,7 @@ struct UserGuideView: View {
                         
                         VStack(alignment: .leading, spacing: 8) {
                             Text("**Classic Progression (Default)**")
-                                .font(.subheadline.weight(.semibold))
+                                .font(.subheadline)
                             Bullet("Upper body (Bench, Row, Press): +5 lbs")
                             Bullet("Lower body (Squat, Deadlift): +10 lbs")
                             Text("Simple, steady, and the traditional 5/3/1 approach. Best for beginners.")
@@ -136,7 +136,7 @@ struct UserGuideView: View {
                         
                         VStack(alignment: .leading, spacing: 8) {
                             Text("**Auto Progression (AMRAP-Based)**")
-                                .font(.subheadline.weight(.semibold))
+                                .font(.subheadline)
                             Bullet("Sets TM to 90% of your best AMRAP-estimated 1RM from the completed cycle")
                             Bullet("Capped at +10 lbs upper / +20 lbs lower per cycle (prevents overreaching)")
                             Bullet("Only progresses lifts you actually performed (respects 3/4/5 day config)")
@@ -158,7 +158,7 @@ struct UserGuideView: View {
                         
                         VStack(alignment: .leading, spacing: 8) {
                             Text("**BBB (5×10)**")
-                                .font(.subheadline.weight(.semibold))
+                                .font(.subheadline)
                             Bullet("5 sets of 10 reps at 50-70% of your TM (you choose in Settings)")
                             Bullet("Default is 50% — adjust in **Settings → Assistance (BBB)**")
                             Bullet("You can log custom weights per BBB set if needed")
@@ -167,7 +167,7 @@ struct UserGuideView: View {
                         
                         VStack(alignment: .leading, spacing: 8) {
                             Text("**Assistance Exercises (2-3 sets)**")
-                                .font(.subheadline.weight(.semibold))
+                                .font(.subheadline)
                             Bullet("Choose one assistance exercise per main lift")
                             Bullet("Built-in library organized by category (legs, push, pull, core)")
                             Bullet("Configure in **Settings → Assistance Exercises**")
@@ -176,7 +176,7 @@ struct UserGuideView: View {
                         
                         VStack(alignment: .leading, spacing: 8) {
                             Text("**Smart Cascade Feature**")
-                                .font(.subheadline.weight(.semibold))
+                                .font(.subheadline)
                             Text("When you change the weight or reps on any BBB or assistance set, it automatically **cascades down** to all remaining sets in that exercise.")
                                 .font(.footnote).foregroundStyle(.secondary)
                             Bullet("Change Set 1 weight → Sets 2-5 update automatically")
@@ -210,14 +210,16 @@ struct UserGuideView: View {
                         
                         FeatureRow("Automatic generation", "Created when you beat your all-time best estimated 1RM", "sparkles")
                         FeatureRow("Personalized medals", "Features your name, lift type, weight, and date", "person.crop.circle.badge.star")
-                        FeatureRow("3D flip view", "Tap any medal to see front and back with animation", "rotate.3d")
+                        FeatureRow("Physics-based 3D", "Flick to spin — harder flicks = faster rotation with realistic momentum", "rotate.3d")
+                        FeatureRow("Dynamic lighting", "Watch light reflections shift as the medal rotates", "light.max")
                         
                         Text("**Accessing Your Trophy Room:**")
-                            .font(.subheadline.weight(.semibold))
+                            .font(.subheadline)
                             .padding(.top, 4)
                         Bullet("Open **PRs & Awards** (top-right icon on main screen)")
                         Bullet("Scroll to the Awards section")
                         Bullet("Tap **Open Trophy Room** to see your full gallery")
+                        Bullet("Tap any medal to view in 3D — **flick to spin** and watch the physics come alive")
                         
                         Text("Awards are generated for estimated 1RM PRs calculated from your AMRAP performance. Set your display name in **Settings → Profile** to personalize medals with your name (defaults to \"CHAMPION\" if not set).")
                             .font(.footnote).foregroundStyle(.secondary)
@@ -235,7 +237,7 @@ struct UserGuideView: View {
                         Bullet("Notes you added that day")
                         
                         Text("**Program Week Summaries:**")
-                            .font(.subheadline.weight(.semibold))
+                            .font(.subheadline)
                             .padding(.top, 4)
                         Bullet("Tap any \"Cycle X, Week Y\" header in History")
                         Bullet("See all lifts completed that week with AMRAP results")
@@ -258,7 +260,7 @@ struct UserGuideView: View {
                         NumberedStep(3, "Affects calculations", detail: "Used for plate math, warmup guidance, and displays.")
                         
                         Text("**Examples:**")
-                            .font(.subheadline.weight(.semibold))
+                            .font(.subheadline)
                             .padding(.top, 4)
                         Bullet("Safety Squat Bar: 75 lbs (not 45)")
                         Bullet("EZ Curl Bar: 25 lbs")
@@ -293,6 +295,7 @@ struct UserGuideView: View {
                         Tip("Keyboard 'Done'", "A **Done** button appears above the keyboard to exit text fields quickly.")
                         Tip("Search assistance", "In exercise pickers, use the search bar to quickly find exercises by name.")
                         Tip("Cascade adjustments", "Change weight/reps on any BBB or assistance set and it cascades to all remaining sets — great for adjusting on the fly.")
+                        Tip("Medal physics", "In Trophy Room medal detail view, **flick harder for faster spins** — the physics respond to your gesture velocity with realistic angular momentum.")
                         Tip("Cycle tracking", "Current cycle and week appear at top of main screen — manual override in Settings if needed.")
                         Tip("TM adjustments", "You can manually adjust any TM between cycles if auto-progression feels too aggressive or conservative.")
                     }
@@ -430,9 +433,9 @@ private func NumberedStep(_ n: Int, _ title: String, detail: String? = nil) -> s
         }
         .frame(width: 26, height: 26)
         VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.subheadline.weight(.semibold))
+            Text(.init(title)).font(.subheadline.weight(.semibold))
             if let detail = detail {
-                Text(detail).font(.footnote).foregroundStyle(.secondary)
+                Text(.init(detail)).font(.footnote).foregroundStyle(.secondary)
             }
         }
         Spacer()
@@ -443,8 +446,8 @@ private func FeatureRow(_ title: String, _ subtitle: String, _ symbol: String) -
     HStack(alignment: .firstTextBaseline, spacing: 12) {
         Image(systemName: symbol).imageScale(.large)
         VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.subheadline.weight(.semibold))
-            Text(subtitle).font(.footnote).foregroundStyle(.secondary)
+            Text(.init(title)).font(.subheadline.weight(.semibold))
+            Text(.init(subtitle)).font(.footnote).foregroundStyle(.secondary)
         }
         Spacer()
     }
@@ -453,7 +456,7 @@ private func FeatureRow(_ title: String, _ subtitle: String, _ symbol: String) -
 private func Bullet(_ text: String) -> some View {
     HStack(alignment: .firstTextBaseline, spacing: 8) {
         Image(systemName: "circle.fill").font(.system(size: 6))
-        Text(text).font(.subheadline)
+        Text(.init(text)).font(.subheadline)
         Spacer()
     }
 }
@@ -466,8 +469,8 @@ private struct Tip: View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Image(systemName: "lightbulb").imageScale(.medium)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.subheadline.weight(.semibold))
-                Text(detail).font(.footnote).foregroundStyle(.secondary)
+                Text(.init(title)).font(.subheadline.weight(.semibold))
+                Text(.init(detail)).font(.footnote).foregroundStyle(.secondary)
             }
             Spacer()
         }
@@ -481,11 +484,11 @@ private struct FAQ: View {
     @State private var open = false
     var body: some View {
         DisclosureGroup(isExpanded: $open) {
-            Text(a).font(.footnote).foregroundStyle(.secondary).padding(.top, 4)
+            Text(.init(a)).font(.footnote).foregroundStyle(.secondary).padding(.top, 4)
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "q.circle").imageScale(.medium)
-                Text(q).font(.subheadline.weight(.semibold))
+                Text(.init(q)).font(.subheadline.weight(.semibold))
             }
         }
     }
@@ -498,8 +501,8 @@ private struct LinkRow: View {
             HStack {
                 Image(systemName: systemImage).imageScale(.medium)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.subheadline.weight(.semibold))
-                    Text(subtitle).font(.footnote).foregroundStyle(.secondary)
+                    Text(.init(title)).font(.subheadline.weight(.semibold))
+                    Text(.init(subtitle)).font(.footnote).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Image(systemName: "arrow.up.right").imageScale(.small).foregroundStyle(.secondary)

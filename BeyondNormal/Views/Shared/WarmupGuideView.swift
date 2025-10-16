@@ -42,7 +42,7 @@ struct WarmupGuideView: View {
     }
 
     private var warmupSteps: [WarmupStep] {
-        buildWarmupPlan(target: targetWeight, bar: barWeight, roundTo: roundTo)
+        buildWarmupPlan(target: targetWeight, bar: barWeight, roundTo: roundTo, lift: lift)
     }
 
     private func perSide(for total: Double) -> [Double] {

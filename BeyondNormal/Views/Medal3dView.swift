@@ -104,7 +104,7 @@ struct Medal3DView: UIViewRepresentable {
         // comment this next line out if it isn’t mirrored on your device
         let fixMirrorU = SCNMatrix4MakeScale(-1, 1, 1)
         let swapThenFix = SCNMatrix4Mult(swapUV_CW, fixMirrorU)
-        
+
         // EXTRA: final 90° screen-space rotation about the UV center
         let extraCW90  = SCNMatrix4Mult(SCNMatrix4MakeTranslation(0.5, 0.5, 0),
                                         SCNMatrix4Mult(SCNMatrix4MakeRotation(-.pi/2, 0, 0, 1),
@@ -113,7 +113,7 @@ struct Medal3DView: UIViewRepresentable {
         // apply it after the existing swap+mirror
         let finalBackXform = SCNMatrix4Mult(swapThenFix, extraCW90)
         back.diffuse.contentsTransform = finalBackXform
-        
+
         back.diffuse.wrapS = .repeat
         back.diffuse.wrapT = .repeat
 
@@ -121,7 +121,7 @@ struct Medal3DView: UIViewRepresentable {
         return SCNNode(geometry: cyl)
     }
 
-    // MARK: - Coordinator (Y-only spin on parent; fixed pose on child)
+    // MARK: - Coordinator (Y-only spin on parent; fixed pose on child) with inertia + velocity flips
     final class Coordinator: NSObject {
         var parent: Medal3DView
         weak var spinner: SCNNode?
@@ -132,64 +132,107 @@ struct Medal3DView: UIViewRepresentable {
         // Gesture state
         private var lastX: CGFloat = 0
 
-        // Tuning
-        private let pxToRad: CGFloat = 0.01     // drag sensitivity (pixels → radians)
-        private let jitterDeadzone: CGFloat = 1.2 // ignore tiny finger jitter (px)
+        // ====== Tuning ======
+        // Drag sensitivity (px -> rad) while finger is down
+        private let pxToRad: CGFloat = 0.01
 
-        // Snapping with hysteresis:
-        // We snap between front (0) and back (π) faces. Hysteresis avoids oscillation near π/2.
-        private let snapHysteresis: Float = 0.25 // radians (~14°) band around midpoint
-        private var lastSnapTarget: Float = 0    // either 0 (front) or π (back)
+        // Deadzone to ignore tiny jitter
+        private let jitterDeadzone: CGFloat = 1.2
+
+        // Flick physics
+        // Converts pan velocity (px/s) to angular velocity (rad/s) at release
+        private let velPxPerSec_toRadPerSec: CGFloat = 0.0075
+
+        // Angular deceleration (rad/s^2). Higher = stops sooner (less coasting).
+        private let angularDecel: CGFloat = 20.0
+
+        // Cap the starting angular velocity (safety & feel)
+        private let maxOmega: CGFloat = 18.0  // rad/s (~3 rev/s)
+
+        // Minimum velocity to treat as a flick. Below this -> midpoint snap (single flip or snap back).
+        private let minFlickOmega: CGFloat = 0.8 // rad/s
+
+        // Optional: haptic feedback on final settle
+        private let hapticsEnabled = true
 
         init(_ parent: Medal3DView) { self.parent = parent }
 
         @objc func handlePan(_ pan: UIPanGestureRecognizer) {
-            guard let node = spinner else { return }
-            let p = pan.translation(in: pan.view)
+            guard let node = spinner, let view = pan.view else { return }
+            let p = pan.translation(in: view)
 
             switch pan.state {
             case .began:
                 lastX = p.x
+                // Cancel any running spin so user takes control immediately
+                node.removeAllActions()
 
             case .changed:
                 var dx = p.x - lastX
-                // small deadzone to reduce jitter
                 if abs(dx) < jitterDeadzone { dx = 0 }
                 lastX = p.x
 
-                // 360° spin: accumulate and normalize to [0, 2π)
                 yAngle += Float(dx * pxToRad)
                 yAngle = normalize2Pi(yAngle)
-
-                // Only rotate Y on the parent; child holds fixed X/Z
                 node.eulerAngles = SCNVector3(0, yAngle, 0)
 
             case .ended, .cancelled:
-                // Pick target (0 or π) with hysteresis to avoid ping-ponging at midpoint.
-                let target = snapTargetWithHysteresis(currentAngle: yAngle,
-                                                      lastTarget: lastSnapTarget,
-                                                      band: snapHysteresis)
+                // --- Inertial continuation using flick velocity ---
+                let vx = pan.velocity(in: view).x  // px/s
+                var omega0 = vx * velPxPerSec_toRadPerSec  // rad/s
+                omega0 = clamp(omega0, -maxOmega, maxOmega)
 
-                // Animate to the nearest equivalent of target (… -2π, 0, +2π, …) relative to current y
-                let goal = nearestEquivalent(of: target, to: yAngle)
+                if abs(omega0) < minFlickOmega {
+                    // Too weak to coast: do a simple midpoint snap (binary, no hysteresis)
+                    let target = snapTargetMidpoint(currentAngle: yAngle)
+                    animateTo(node: node, targetAngle: target, duration: 0.28, shortestArc: true)
+                    return
+                }
 
-                let action = SCNAction.rotateTo(x: 0,
-                                                y: CGFloat(goal),
-                                                z: 0,
-                                                duration: 0.35,
-                                                usesShortestUnitArc: true)
-                action.timingMode = .easeOut
-                node.runAction(action)
+                // Physics: coast with constant decel to rest
+                // Time to stop: t = |ω0| / α
+                let t = abs(omega0) / angularDecel
 
-                yAngle = normalize2Pi(goal)
-                lastSnapTarget = target
+                // Angular travel until rest: Δθ = ω0^2 / (2α)
+                let travel = (omega0 * omega0) / (2.0 * angularDecel) // positive
+                let signedTravel = (omega0 >= 0 ? travel : -travel)
+
+                // Proposed final angle before snapping
+                let proposed = Float(CGFloat(yAngle) + signedTravel)
+
+                // Snap to nearest multiple of π so we land exactly on a face (enables multi-flip)
+                let snapped = nearestMultipleOfPi(proposed)
+
+                // Animate to snapped with duration t; preserve direction (no shortest-arc hop)
+                animateTo(node: node, targetAngle: snapped, duration: t, shortestArc: false)
 
             default:
                 break
             }
         }
 
-        // MARK: - Helpers
+        // MARK: - Animation helper
+
+        private func animateTo(node: SCNNode, targetAngle: Float, duration: CGFloat, shortestArc: Bool) {
+            let action = SCNAction.rotateTo(
+                x: 0,
+                y: CGFloat(targetAngle),
+                z: 0,
+                duration: TimeInterval(max(0.12, duration)),
+                usesShortestUnitArc: shortestArc == true
+            )
+            action.timingMode = .easeOut
+            node.runAction(action) { [weak self] in
+                guard let self = self else { return }
+                self.yAngle = self.normalize2Pi(targetAngle)
+                if self.hapticsEnabled {
+                    let gen = UIImpactFeedbackGenerator(style: .light)
+                    gen.impactOccurred()
+                }
+            }
+        }
+
+        // MARK: - Angle math
 
         /// Normalize any angle to [0, 2π)
         private func normalize2Pi(_ a: Float) -> Float {
@@ -199,41 +242,25 @@ struct Medal3DView: UIViewRepresentable {
             return x
         }
 
-        /// Return the snap target (0 or π) using a hysteresis band around π/2 so we don't flicker.
-        private func snapTargetWithHysteresis(currentAngle: Float,
-                                              lastTarget: Float,
-                                              band: Float) -> Float {
-            // Reduce to a 0..π window so front/back decisions are periodic with period π
-            let within = fmodf(currentAngle, Float.pi)
-            let midpoint = Float.pi / 2
-
-            var target = lastTarget
-            if lastTarget == 0 {
-                // From front → back only if sufficiently past midpoint + band
-                if within >= (midpoint + band) { target = Float.pi }
-                // From front stay front if below midpoint - band (or in-band)
-                else if within <= (midpoint - band) { target = 0 }
-                // else within hysteresis band: keep last target (front)
-            } else { // lastTarget == π
-                // From back → front only if sufficiently before midpoint - band
-                if within <= (midpoint - band) { target = 0 }
-                // From back stay back if above midpoint + band (or in-band)
-                else if within >= (midpoint + band) { target = Float.pi }
-                // else within hysteresis band: keep last target (back)
-            }
-            return target
+        /// Binary midpoint snap: reduce to [0, π), snap at π/2 to 0 or π.
+        private func snapTargetMidpoint(currentAngle: Float) -> Float {
+            let twoPi = Float.pi * 2
+            var x = fmodf(currentAngle, twoPi)
+            if x < 0 { x += twoPi }
+            let withinHalfTurn = fmodf(x, Float.pi)
+            return withinHalfTurn >= (Float.pi / 2) ? Float.pi : 0
         }
 
-        /// Choose the nearest 2π-equivalent of `target` to the current `angle`
-        private func nearestEquivalent(of target: Float, to angle: Float) -> Float {
-            let twoPi = Float.pi * 2
-            // Base candidate near angle by shifting target by k·2π
-            var k = roundf((angle - target) / twoPi)
-            var candidate = target + k * twoPi
-            // Check neighbors ±2π for an even closer absolute difference
-            if abs(candidate - angle) > abs((candidate + twoPi) - angle) { candidate += twoPi }
-            if abs(candidate - angle) > abs((candidate - twoPi) - angle) { candidate -= twoPi }
-            return candidate
+        /// Nearest multiple of π to the given angle (… , -π, 0, π, 2π, …)
+        private func nearestMultipleOfPi(_ angle: Float) -> Float {
+            let k = roundf(angle / Float.pi)
+            return k * Float.pi
+        }
+
+        // MARK: - Utils
+
+        private func clamp<T: Comparable>(_ x: T, _ a: T, _ b: T) -> T {
+            return min(max(x, a), b)
         }
     }
 }
