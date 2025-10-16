@@ -1,8 +1,9 @@
 import SwiftUI
 
 struct MedalFrontView: View {
+    let lift: LiftType
     var body: some View {
-        Image("deadlift_medal_front")
+        Image(lift.frontImageAssetName)
             .resizable()
             .scaledToFit()
             .clipShape(Circle())      // <- trims the square to a circular alpha
