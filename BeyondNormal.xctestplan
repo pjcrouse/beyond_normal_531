@@ -1,0 +1,38 @@
+{
+  "configurations" : [
+    {
+      "id" : "2B92BF9A-29DE-45E8-B229-4E92CB494620",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : {
+      "targets" : [
+        {
+          "containerPath" : "container:BeyondNormal.xcodeproj",
+          "identifier" : "F831DC012E946F8000293177",
+          "name" : "BeyondNormal"
+        }
+      ]
+    },
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:BeyondNormal.xcodeproj",
+      "identifier" : "F831DC012E946F8000293177",
+      "name" : "BeyondNormal"
+    }
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:BeyondNormal.xcodeproj",
+        "identifier" : "F8DC5BBE2E9D24FF00603608",
+        "name" : "BeyondNormalTests"
+      }
+    }
+  ],
+  "version" : 1
+}

@@ -32,7 +32,7 @@ func suggestedMovement(for lift: Lift) -> String {
 /// - Total sets capped at 4 (bar + up to 3 warmups)
 /// - Usually gives 2–3 total sets depending on the jump.
 /// - Rounds and de-dupes after rounding.
-func buildWarmupPlan(target: Double, bar: Double, roundTo: Double) -> [WarmupStep] {
+func buildWarmupPlan(target: Double, bar: Double, roundTo: Double, lift: Lift) -> [WarmupStep] {
     // Guard rails
     guard target.isFinite, bar.isFinite, target > bar else {
         return [WarmupStep(weight: bar, reps: 10)]
@@ -40,10 +40,19 @@ func buildWarmupPlan(target: Double, bar: Double, roundTo: Double) -> [WarmupSte
 
     @inline(__always) func r(_ x: Double) -> Double { LoadRounder.round(x, to: roundTo) }
 
-    var steps: [WarmupStep] = [.init(weight: r(bar), reps: 10)]
+    // Special case: Deadlifts need proper bar height (standard 45 lb plates)
+    // For strong lifters (target >= 225), start at 135 minimum for proper positioning
+    let effectiveBar: Double
+    if lift == .deadlift && target >= 225 {
+        effectiveBar = max(bar, 135)
+    } else {
+        effectiveBar = bar
+    }
 
-    // How big is the jump from bar → first work set?
-    let span = target - bar
+    var steps: [WarmupStep] = [.init(weight: r(effectiveBar), reps: 10)]
+
+    // How big is the jump from effective bar → first work set?
+    let span = target - effectiveBar
 
     // Decide how many intermediate steps we want (bar not counted).
     // Goal: usually 1–2 steps; 3 only for big jumps.
@@ -66,11 +75,11 @@ func buildWarmupPlan(target: Double, bar: Double, roundTo: Double) -> [WarmupSte
 
     let pcts = pctTemplates[min(stepCount, 3) - 1]
 
-    // Turn into candidate weights, clamp to be strictly between bar and target
+    // Turn into candidate weights, clamp to be strictly between effectiveBar and target
     // after rounding, then de-dupe & sort.
     var candidates = pcts
         .map { r(target * $0) }
-        .filter { $0 > bar && $0 < target }
+        .filter { $0 > effectiveBar && $0 < target }
 
     // De-dupe after rounding
     candidates = Array(Set(candidates)).sorted()
@@ -78,8 +87,8 @@ func buildWarmupPlan(target: Double, bar: Double, roundTo: Double) -> [WarmupSte
     // If rounding caused duplicates that trimmed us too much (e.g., all collapsed),
     // fall back to simple midpoints to ensure at least one useful touch.
     if candidates.isEmpty && stepCount > 0 {
-        let mid = r((bar + target) / 2.0)
-        if mid > bar && mid < target { candidates = [mid] }
+        let mid = r((effectiveBar + target) / 2.0)
+        if mid > effectiveBar && mid < target { candidates = [mid] }
     }
 
     // Cap to at most 3 candidates (bar + 3 = 4 total)
@@ -110,8 +119,8 @@ func buildWarmupPlan(target: Double, bar: Double, roundTo: Double) -> [WarmupSte
 
     // If we somehow ended with only the bar and the jump is large, add a midpoint
     if steps.count == 1 && span >= 60 {
-        let mid = r((bar + target) * 0.7)
-        if mid > bar && mid < target {
+        let mid = r((effectiveBar + target) * 0.7)
+        if mid > effectiveBar && mid < target {
             steps.append(.init(weight: mid, reps: suggestedReps(mid)))
         }
     }
