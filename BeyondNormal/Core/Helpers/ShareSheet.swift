@@ -2,18 +2,11 @@ import SwiftUI
 import UIKit
 import LinkPresentation
 
-enum ShareContentType {
-    case award(Award)
-    case summary(String)
-}
-
-// Text provider ensures Messages gets NSString (prevents blank body)
+// ---- Messages-safe text payload (uses NSString) ----
 final class BNSharePayload: NSObject, UIActivityItemSource {
     private let text: String
-    init(text: String) {
-        self.text = text
-        super.init()
-    }
+    init(text: String) { self.text = text }
+
     func activityViewControllerPlaceholderItem(_ activityViewController: UIActivityViewController) -> Any {
         text as NSString
     }
@@ -32,55 +25,61 @@ struct ShareSheet: UIViewControllerRepresentable {
     var context: ShareContentType?
 
     func makeUIViewController(context: Context) -> UIActivityViewController {
-        var shareText = ""
-        var shareImage: UIImage? = nil
+        var finalText = ""
+        var image: UIImage? = nil
+
+        // Brand wrapper used by ALL cases
+        func branded(title: String, body: String) -> String {
+            """
+            🔥 Beyond Normal — \(title)
+
+            \(body)
+
+            Train smarter. Live stronger.
+            https://apps.apple.com/app/beyond-normal-strength/idXXXXXXXXX
+            """
+        }
 
         if let ctx = self.context {
             switch ctx {
-            case .award(let award):
-                shareText = """
-                🔥 Beyond Normal
-                \(award.title)
-                Earned by \(award.subtitle.replacingOccurrences(of: "EARNED BY ", with: ""))
+            case .summary(let summaryBody):
+                finalText = branded(title: "Workout Summary",
+                                    body: summaryBody.trimmingCharacters(in: .whitespacesAndNewlines))
 
-                Strength redefined. Train smarter. Live stronger.
-                https://apps.apple.com/app/beyond-normal-strength/idXXXXXXXXX
+            case .weeklySummary(let result):
+                let total = result.totalVolume.formatted(.number)
+                let liftsBlock = result.lifts.map {
+                    "\($0.lift): Vol \($0.totalVolume.formatted(.number)) lb" +
+                    ($0.est1RM > 0 ? ", Est 1RM \($0.est1RM)" : "")
+                }.joined(separator: "\n")
+                let body =
                 """
-                shareImage = AwardGenerator.shared.resolveUIImage(award.frontImagePath)
+                Cycle \(result.cycle) • Week \(result.programWeek)
+                Total Volume: \(total) lb
 
-            case .summary(let s):
-                let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
-                shareText = trimmed.isEmpty
-                ? """
-                  🔥 Beyond Normal
-                  Workout summary
+                \(liftsBlock)
+                """
+                finalText = branded(title: "Weekly Summary", body: body)
 
-                  Strength redefined. Train smarter. Live stronger.
-                  https://apps.apple.com/app/beyond-normal-strength/idXXXXXXXXX
-                  """
-                : """
-                  🔥 Beyond Normal
-                  Today's workout summary:
-
-                  \(trimmed)
-
-                  Strength redefined. Train smarter. Live stronger.
-                  https://apps.apple.com/app/beyond-normal-strength/idXXXXXXXXX
-                  """
+            case .award(let award):
+                image = AwardGenerator.shared.resolveUIImage(award.frontImagePath)
+                let body =
+                """
+                \(award.title)
+                \(award.date.formatted(date: .abbreviated, time: .omitted))
+                """
+                finalText = branded(title: "PR Award", body: body)
             }
         }
 
-        // Items: include medal image for awards, plus text payload (as NSString)
-        var items: [Any] = []
-        if let img = shareImage {
-            items.append(img)
-        }
-        items.append(BNSharePayload(text: shareText))
+        // Always use BNSharePayload so iMessage gets NSString (prevents blank body)
+        var items: [Any] = [BNSharePayload(text: finalText)]
+        if let img = image { items.insert(img, at: 0) }
 
         let vc = UIActivityViewController(activityItems: items, applicationActivities: nil)
         vc.excludedActivityTypes = [.assignToContact, .addToReadingList, .print]
         return vc
     }
 
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+    func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
 }

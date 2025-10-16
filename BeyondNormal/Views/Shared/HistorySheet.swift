@@ -9,9 +9,6 @@ struct HistorySheet: View {
     @State private var entries: [WorkoutEntry] = []
     @State private var expanded: Set<UUID> = []
     
-    // Weekly summary presentation state
-    @State private var weeklyResult: WeeklySummaryResult?
-    
     // ✅ New: filter state (nil = All)
     @State private var selectedFilter: Lift? = nil
     
@@ -126,38 +123,20 @@ struct HistorySheet: View {
                     } label: { Image(systemName: "arrow.clockwise") }
                         .accessibilityLabel("Refresh")
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        let result = computeProgramWeekSummary(
-                            programWeek: currentProgramWeek,
-                            cycle: currentCycle,
-                            entries: filteredEntries
-                        )
-                        weeklyResult = result
-                    } label: { Image(systemName: "calendar.badge.checkmark") }
-                        .accessibilityLabel("Weekly Summary")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        let result = computeProgramWeekSummary(
-                            cycle: currentCycle,
-                            programWeek: currentProgramWeek,
-                            entries: WorkoutStore.shared.load()
-                        )
-                        pwResult = result
-                    } label: { Image(systemName: "number.square") } // looks like “week”
-                        .accessibilityLabel("Program Week Summary")
-                }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            let result = computeProgramWeekSummary(
+                                cycle: currentCycle,
+                                programWeek: currentProgramWeek,
+                                entries: WorkoutStore.shared.load()
+                            )
+                            pwResult = result
+                        } label: { Image(systemName: "calendar.badge.checkmark") } // looks like “week”
+                            .accessibilityLabel("Program Week Summary")
+                    }
             }
             .onAppear {
                 entries = WorkoutStore.shared.load().sorted { $0.date > $1.date }
-            }
-            .sheet(item: $weeklyResult) { r in
-                WeeklySummarySheet(
-                    result: r,
-                    preferredOrder: availableLifts.map { $0.label }   // ✅ pass program order
-                )
-                .presentationDetents([.medium, .large])
             }
             .sheet(item: $pwResult) { r in
                 ProgramWeekSummarySheet(result: r)
@@ -242,10 +221,5 @@ struct HistorySheet: View {
         
         // ✅ Capture the final payload in the item that drives the sheet
         activeShare = ShareRequest(context: .summary(summaryText))
-    }
-    
-    struct ShareRequest: Identifiable {
-        let id = UUID()
-        let context: ShareContentType   // from your ShareSheet.swift
     }
 }

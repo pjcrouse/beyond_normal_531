@@ -1,11 +1,5 @@
 import SwiftUI
 
-// Drives the share sheet with a captured payload (prevents state timing issues)
-struct ShareRequest: Identifiable {
-    let id = UUID()
-    let context: ShareContentType
-}
-
 struct TrophyRoomView: View {
     @StateObject private var store = AwardStore()
 
