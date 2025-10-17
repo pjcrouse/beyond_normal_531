@@ -2,7 +2,7 @@ import Foundation
 
 extension WorkoutStore {
     func load(in interval: DateInterval) -> [WorkoutEntry] {
-        load().filter { interval.contains($0.date) }
+        workouts.filter { interval.contains($0.date) }
     }
 }
 
