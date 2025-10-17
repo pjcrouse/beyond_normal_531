@@ -55,3 +55,20 @@ final class PRService {
         return nil
     }
 }
+// MARK: - Estimated 1RM direct update
+extension PRService {
+    /// Compare a computed estimated 1RM against stored PRs.
+    /// Returns the new PR if it improved by >= 0.5 lb.
+    func updateIfEstimatedPR(lift: LiftType, estValue: Double, date: Date) -> PersonalRecord? {
+        let prev = best(for: lift, metric: .estimatedOneRM)?.value ?? 0
+        if estValue >= prev + 0.5 {
+            let pr = PersonalRecord(lift: lift, metric: .estimatedOneRM, value: estValue, date: date)
+            prs.append(pr)
+            // persist
+            let d = try? JSONEncoder().encode(prs)
+            UserDefaults.standard.set(d, forKey: "stored_prs_v1")
+            return pr
+        }
+        return nil
+    }
+}
