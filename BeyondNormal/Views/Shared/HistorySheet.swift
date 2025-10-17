@@ -16,6 +16,9 @@ struct HistorySheet: View {
     
     @State private var activeShare: ShareRequest? = nil
     
+    @State private var showDeleteError = false
+    @State private var deleteErrorMessage = ""
+    
     var body: some View {
         NavigationStack {
             VStack(spacing: 8) {
@@ -119,7 +122,7 @@ struct HistorySheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        entries = WorkoutStore.shared.load().sorted { $0.date > $1.date }
+                        entries = WorkoutStore.shared.workouts.sorted { $0.date > $1.date }
                     } label: { Image(systemName: "arrow.clockwise") }
                         .accessibilityLabel("Refresh")
                 }
@@ -128,7 +131,7 @@ struct HistorySheet: View {
                             let result = computeProgramWeekSummary(
                                 cycle: currentCycle,
                                 programWeek: currentProgramWeek,
-                                entries: WorkoutStore.shared.load()
+                                entries: WorkoutStore.shared.workouts
                             )
                             pwResult = result
                         } label: { Image(systemName: "calendar.badge.checkmark") } // looks like “week”
@@ -136,7 +139,7 @@ struct HistorySheet: View {
                     }
             }
             .onAppear {
-                entries = WorkoutStore.shared.load().sorted { $0.date > $1.date }
+                entries = WorkoutStore.shared.workouts.sorted { $0.date > $1.date }
             }
             .sheet(item: $pwResult) { r in
                 ProgramWeekSummarySheet(result: r)
@@ -144,6 +147,11 @@ struct HistorySheet: View {
             }
             .sheet(item: $activeShare) { req in
                 ShareSheet(context: req.context)
+            }
+            .alert("Error", isPresented: $showDeleteError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(deleteErrorMessage)
             }
         }
     }
@@ -195,8 +203,14 @@ struct HistorySheet: View {
     }
     
     private func delete(_ entry: WorkoutEntry) {
-        WorkoutStore.shared.delete(id: entry.id)
-        entries.removeAll { $0.id == entry.id }
+        do {
+            try WorkoutStore.shared.delete(id: entry.id)
+            entries.removeAll { $0.id == entry.id }
+        } catch {
+            print("⚠️ Failed to delete workout: \(error.localizedDescription)")
+            deleteErrorMessage = "Failed to delete workout: \(error.localizedDescription)"
+            showDeleteError = true
+        }
     }
     
     // MARK: - Share helper

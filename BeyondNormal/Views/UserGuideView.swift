@@ -249,6 +249,48 @@ struct UserGuideView: View {
                     }
                 }
                 
+                // Data Management & Export
+                GuideCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionHeader("Data Management & Export", systemImage: "externaldrive.fill")
+                        Text("Backup, export, and manage all your workout data:")
+                            .foregroundStyle(.primary)
+                        
+                        Text("**Export Your Data:**")
+                            .font(.subheadline)
+                            .padding(.top, 4)
+                        Bullet("**Export All Data (JSON):** Complete backup with all workouts, PRs, and metadata")
+                        Bullet("**Export Workouts (CSV):** Open in Excel or Google Sheets for analysis")
+                        Bullet("**Export PRs (CSV):** Track your progress over time in spreadsheets")
+                        
+                        Text("**Manage Your Data:**")
+                            .font(.subheadline)
+                            .padding(.top, 8)
+                        Bullet("**View All Workouts:** Search and filter your complete workout history")
+                        Bullet("**View Workout Details:** See full breakdown of any past workout")
+                        Bullet("**Delete Workouts:** Remove individual entries with confirmation")
+                        Bullet("**View All PRs:** See personal records by lift and by cycle")
+                        Bullet("**Storage Stats:** Monitor how much space your data uses")
+                        
+                        Text("**Where to Find It:**")
+                            .font(.subheadline)
+                            .padding(.top, 8)
+                        Text("Tap the **Data** icon (📂) in the top-left corner of the main screen, next to History.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                        
+                        Text("**Why Export?**")
+                            .font(.subheadline)
+                            .padding(.top, 8)
+                        Bullet("Create backups before major iOS updates")
+                        Bullet("Analyze your progress in spreadsheet apps")
+                        Bullet("Keep a copy for your records")
+                        Bullet("Switch devices or apps with your data intact")
+                        
+                        Text("All exports include timestamps and can be imported back into the app (JSON format only).")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
+                
                 // Sharing
                 GuideCard {
                     VStack(alignment: .leading, spacing: 12) {
@@ -344,6 +386,21 @@ struct UserGuideView: View {
 
                         FAQ("Why does Messages show a subject line sometimes?",
                             "If the subject field is enabled in your Messages settings, iOS will show a subject row. The content you share still appears in the body so recipients always see it.")
+                        
+                        FAQ("How do I backup my data?",
+                            "Tap **Data** (📂 icon) in the top-left → **Export All Data (JSON)**. Save the file to iCloud Drive or Files app. This includes all workouts, PRs, and settings.")
+
+                        FAQ("Can I view my data in Excel?",
+                            "Yes! Tap **Data** → **Export Workouts (CSV)** or **Export PRs (CSV)**. Open the exported file in Excel, Numbers, or Google Sheets.")
+
+                        FAQ("How do I delete a single workout?",
+                            "Tap **Data** → **View All Workouts** → tap the workout → **Delete Workout**. Or swipe left on any workout in History and tap Delete.")
+
+                        FAQ("What happens to my data if I delete the app?",
+                            "All local data is deleted. Export your data regularly to Files or iCloud for safekeeping.")
+
+                        FAQ("How much storage does my data use?",
+                            "Tap **Data** to see storage statistics at the top. Typical usage: ~1KB per workout, so even 1,000 workouts = ~1MB.")
                     }
                 }
 
@@ -406,7 +463,7 @@ private struct GuideHero: View {
         ZStack {
             // 🔥 Updated gradient (slightly stronger for better contrast)
             LinearGradient(
-                colors: [Color.accentColor.opacity(0.22), Color.blue.opacity(0.16)],
+                colors: [Color(hex: "e55722").opacity(0.22), Color(hex: "2c7f7a").opacity(0.16)],
                 startPoint: .topLeading, endPoint: .bottomTrailing
             )
             .clipShape(RoundedRectangle(cornerRadius: 24))
