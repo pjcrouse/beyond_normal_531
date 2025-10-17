@@ -22,7 +22,7 @@ final class AwardGenerator {
         let backLine2 = "\(pr.lift.rawValue.uppercased()) PR"
 
         // These are the views now defined in Views/…
-        let front = MedalFrontView()
+        let front = MedalFrontView(lift: pr.lift)
         let back  = MedalBackView(
             user: userDisplayName,
             line1: backLine1,

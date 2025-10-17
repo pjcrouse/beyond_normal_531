@@ -49,3 +49,17 @@ final class AwardStore: ObservableObject {
         save()
     }
 }
+extension LiftType {
+    var frontImageAssetName: String {
+        switch self {
+        case .squat:    return "squat_medal_front"
+        case .deadlift: return "deadlift_medal_front"
+        case .bench:    return "bench_medal_front"
+        case .press:    return "press_medal_front"
+        case .row:      return "row_medal_front"
+        }
+    }
+    var prBackImageAssetName: String {
+        "medal_back_base"
+    }
+}
