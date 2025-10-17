@@ -12,6 +12,7 @@ struct UserGuideView: View {
                     title: "Beyond Normal",
                     subtitle: "5/3/1 training, simplified."
                 )
+                
 
                 // Program Configuration
                 GuideCard {
@@ -205,23 +206,20 @@ struct UserGuideView: View {
                 GuideCard {
                     VStack(alignment: .leading, spacing: 12) {
                         SectionHeader("Trophy Room & Awards", systemImage: "trophy.fill")
-                        Text("When you set a new **personal record (PR)**, the app automatically creates a commemorative medal to celebrate your achievement!")
+                        Text("When you set a new **personal record (PR)**, the app creates a commemorative medal.")
                             .foregroundStyle(.primary)
-                        
-                        FeatureRow("Automatic generation", "Created when you beat your all-time best estimated 1RM", "sparkles")
-                        FeatureRow("Personalized medals", "Features your name, lift type, weight, and date", "person.crop.circle.badge.star")
-                        FeatureRow("Physics-based 3D", "Flick to spin — harder flicks = faster rotation with realistic momentum", "rotate.3d")
-                        FeatureRow("Dynamic lighting", "Watch light reflections shift as the medal rotates", "light.max")
-                        
-                        Text("**Accessing Your Trophy Room:**")
+
+                        FeatureRow("Filter & Sort", "Filter by lift and sort by date or weight to find medals fast.", "line.3.horizontal.decrease.circle")
+                        FeatureRow("Share your medals", "Open a medal → **Share Award** to send an image and details.", "square.and.arrow.up")
+                        FeatureRow("3D medals", "Tap any medal and **flick to spin** with physics-based motion.", "rotate.3d")
+
+                        Text("**Open the Trophy Room:** PRs & Awards → **Open Trophy Room**.")
                             .font(.subheadline)
-                            .padding(.top, 4)
-                        Bullet("Open **PRs & Awards** (top-right icon on main screen)")
-                        Bullet("Scroll to the Awards section")
-                        Bullet("Tap **Open Trophy Room** to see your full gallery")
-                        Bullet("Tap any medal to view in 3D — **flick to spin** and watch the physics come alive")
-                        
-                        Text("Awards are generated for estimated 1RM PRs calculated from your AMRAP performance. Set your display name in **Settings → Profile** to personalize medals with your name (defaults to \"CHAMPION\" if not set).")
+                        Bullet("Tap a medal for a high-res 3D view")
+                        Bullet("Use the menus above the grid to filter/sort")
+                        Bullet("Tap **Share Award** to send to Messages or social")
+
+                        Text("Medals personalize with your display name in **Settings → Profile**.")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                 }
@@ -244,7 +242,25 @@ struct UserGuideView: View {
                         Bullet("View total volume and best estimated 1RMs")
                         Bullet("Track progress trends across cycles")
                         
-                        Text("Find everything in **History** (top-left clock icon). Swipe left to delete entries or long-press for options like **Delete** or **Copy Summary**.")
+                        Text("Find everything in **History** (top-left clock icon).")
+                            .font(.footnote).foregroundStyle(.secondary)
+                        Bullet("Tap an entry to expand notes; long-press for **Share summary** or **Delete**")
+                        Bullet("Tap the week header icon for **Program Week Summary**; use **Share** on that screen")
+                    }
+                }
+                
+                // Sharing
+                GuideCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionHeader("Sharing", systemImage: "square.and.arrow.up")
+                        Text("Share your progress straight from Beyond Normal.")
+                            .foregroundStyle(.primary)
+
+                        FeatureRow("Daily summaries", "Long-press a history entry → **Share summary**.", "doc.text")
+                        FeatureRow("Weekly summaries", "Open **Program Week Summary** → **Share**.", "calendar.badge.checkmark")
+                        FeatureRow("Awards", "Open any medal → **Share Award** to send the image + text.", "rosette")
+
+                        Text("iMessage receives rich text that always renders (no blank body issues).")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                 }
@@ -323,6 +339,11 @@ struct UserGuideView: View {
                             "Yes! Configure per-exercise bar weights in Settings → Implements. This affects plate math, warmup guidance, and weight displays. Great for specialty bars like SSB, trap bar, or EZ curl bar.")
                         FAQ("What happens during deload week?",
                             "Week 4 is your deload — a built-in recovery phase. You'll use lighter weights (40-60% TM), lower volume, and skip BBB/assistance work so your body can heal and adapt. Focus this week on sleep, nutrition, stress management, and gentle movement — light cardio, walks, mobility work. This isn't downtime; it's where progress locks in and you recharge for the next cycle.")
+                        FAQ("How do I share a workout or week?",
+                            "Long-press a history entry and choose **Share summary**. For weeks, open **Program Week Summary** and tap **Share** in the top-right.")
+
+                        FAQ("Why does Messages show a subject line sometimes?",
+                            "If the subject field is enabled in your Messages settings, iOS will show a subject row. The content you share still appears in the body so recipients always see it.")
                     }
                 }
 
@@ -346,6 +367,7 @@ struct UserGuideView: View {
 
                 Spacer(minLength: 4)
             }
+            .frame(maxWidth: 700)
             .padding(.horizontal)
             .padding(.vertical, 12)
         }
@@ -382,8 +404,9 @@ private struct GuideHero: View {
     let subtitle: String
     var body: some View {
         ZStack {
+            // 🔥 Updated gradient (slightly stronger for better contrast)
             LinearGradient(
-                colors: [Color.accentColor.opacity(0.15), Color.blue.opacity(0.10)],
+                colors: [Color.accentColor.opacity(0.22), Color.blue.opacity(0.16)],
                 startPoint: .topLeading, endPoint: .bottomTrailing
             )
             .clipShape(RoundedRectangle(cornerRadius: 24))
@@ -401,8 +424,9 @@ private struct GuideHero: View {
             }
             .padding(18)
         }
-        .overlay( // soft shadow
-            RoundedRectangle(cornerRadius: 24).strokeBorder(.quaternary, lineWidth: 1)
+        .overlay( // soft border shadow
+            RoundedRectangle(cornerRadius: 24)
+                .strokeBorder(.quaternary, lineWidth: 1)
         )
     }
 }
