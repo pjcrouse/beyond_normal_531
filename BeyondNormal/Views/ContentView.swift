@@ -6,6 +6,7 @@ import UserNotifications
 // MARK: - Main View
 
 struct ContentView: View {
+    @EnvironmentObject private var settings: ProgramSettings
     // Training inputs
     @AppStorage("tm_squat")    private var tmSquat: Double = 315
     @AppStorage("tm_bench")    private var tmBench: Double = 225
@@ -27,7 +28,6 @@ struct ContentView: View {
     @AppStorage("timer_bbb_sec")     private var timerBBBsec: Int = 120
     @AppStorage("current_week")      private var currentWeek: Int = 1
     
-    @AppStorage("tm_progression_style") private var tmProgStyleRaw: String = "classic"
     @AppStorage("auto_advance_week")    private var autoAdvanceWeek: Bool = true
     
     // Selected assistance by main lift
@@ -36,9 +36,6 @@ struct ContentView: View {
     @AppStorage("assist_deadlift_id") private var assistDeadliftID: String = "back_ext"
     @AppStorage("assist_row_id")      private var assistRowID: String = "spider_curls"
     @AppStorage("assist_press_id") private var assistPressID: String = "triceps_ext" // safe default
-    
-    // 1 Rep Max Formula
-    @AppStorage("one_rm_formula") private var oneRMFormulaRaw: String = "epley"
     
     // Configurable workouts per week support
     @AppStorage("workouts_per_week") private var workoutsPerWeek: Int = 4   // 3, 4, or 5
@@ -122,38 +119,31 @@ struct ContentView: View {
     
     private func applyTMProgressionForNewCycle(from oldCycle: Int) {
         let liftsToProgress = activeLifts  // only what the program actually used
-        
-        if tmProgStyleRaw == "classic" {
+
+        switch settings.progressionStyle {
+        case .classic:
             for lift in liftsToProgress {
                 let bumped = getTM(lift) + classicBumpAmount(for: lift)
                 setTM(lift, bumped)
             }
             return
-        }
-        
-        // AUTO progression
-        for lift in liftsToProgress {
-            // Best est-1RM recorded THIS cycle for this lift
-            let best = PRStore.shared.bestByCycle[PRKey(cycle: oldCycle, lift: lift.label)] ?? 0
-            guard best > 0 else { continue } // nothing to update if no AMRAPs logged
-            
-            let targetTM = (Double(best) * 0.90).rounded() // 90% rule
-            let currentTM = getTM(lift)
-            
-            // Cap the increase per cycle
-            let maxUp = autoMaxDelta(for: lift)
-            let delta = min(max(targetTM - currentTM, 0), maxUp)
-            
-            setTM(lift, currentTM + delta)
-        }
-    }
-    
-    private var oneRMFormula: OneRepMaxFormula {
-        switch oneRMFormulaRaw.lowercased() {
-        case "epley":    return .epley
-        case "brzycki":  return .brzycki
-        case "mayhew":   return .mayhew
-        default:         return .epley   // safe default
+
+        case .auto:
+            for lift in liftsToProgress {
+                // Best est-1RM recorded THIS cycle for this lift
+                let best = PRStore.shared.bestByCycle[PRKey(cycle: oldCycle, lift: lift.label)] ?? 0
+                guard best > 0 else { continue }
+
+                // Use the user’s percent instead of hardcoded 90
+                let targetTM = (Double(best) * Double(settings.autoTMPercent) / 100.0).rounded()
+                let currentTM = getTM(lift)
+
+                // Cap the increase per cycle
+                let maxUp = autoMaxDelta(for: lift)
+                let delta = min(max(targetTM - currentTM, 0), maxUp)
+
+                setTM(lift, currentTM + delta)
+            }
         }
     }
     
@@ -249,30 +239,9 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $showSettings) {
-            SettingsSheet(
-                tmSquat: $tmSquat,
-                tmBench: $tmBench,
-                tmDeadlift: $tmDeadlift,
-                tmRow: $tmRow,
-                tmPress: $tmPress,
-                barWeight: $barWeight,
-                roundTo: $roundTo,
-                bbbPct: $bbbPct,
-                timerRegularSec: $timerRegularSec,
-                timerBBBsec: $timerBBBsec,
-                tmProgStyleRaw: $tmProgStyleRaw,
-                autoAdvanceWeek: $autoAdvanceWeek,
-                oneRMFormulaRaw: $oneRMFormulaRaw,
-                assistSquatID: $assistSquatID,
-                assistBenchID: $assistBenchID,
-                assistDeadliftID: $assistDeadliftID,
-                assistRowID: $assistRowID,
-                assistPressID: $assistPressID,
-                workoutsPerWeek: $workoutsPerWeek,
-                fourthLiftRaw: $fourthLiftRaw,
-                userDisplayName: $userDisplayName
-            )
-            .presentationDetents([.medium, .large])
+            SettingsSheet()
+                .environmentObject(settings)        // already injected from App root, but explicit is fine
+                .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showHistory) {
             HistorySheet(
@@ -396,7 +365,7 @@ struct ContentView: View {
                     return estimate1RM(
                         weight: w,
                         reps: reps,
-                        formula: oneRMFormula,
+                        formula: settings.oneRMFormula,
                         softWarnAt: 11,
                         hardCap: 15,
                         refuseAboveHardCap: true, // or false to cap instead of refuse
@@ -410,7 +379,7 @@ struct ContentView: View {
                 allowTimerStarts: allowTimerStarts,
                 armTimers: armTimers,
                 isWorkoutFinished: isWorkoutFinished,
-                currentFormula: oneRMFormula,
+                currentFormula: settings.oneRMFormula,
                 availableLifts: activeLifts,
                 currentCycle: currentCycle,
                 startRest: { secs, fromUser in
@@ -648,7 +617,7 @@ struct ContentView: View {
             let r = estimate1RM(
                 weight: w,
                 reps: amrapReps,
-                formula: oneRMFormula,
+                formula: settings.oneRMFormula,
                 softWarnAt: 11,
                 hardCap: 15,
                 refuseAboveHardCap: true,
