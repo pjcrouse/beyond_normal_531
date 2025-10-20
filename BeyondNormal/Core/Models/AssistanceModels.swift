@@ -11,6 +11,11 @@ enum AssistanceSource: Codable, Equatable, Hashable {
     case imported(packId: String, author: String?)
 }
 
+// ⬇️ add near your other enums
+enum EquipmentKind: String, Codable, CaseIterable {
+    case bodyweight, dumbbells, barbell, machine, cable, other
+}
+
 struct AssistanceExercise: Identifiable, Codable, Hashable {
     // EXISTING FIELDS (unchanged)
     let id: String
@@ -28,11 +33,14 @@ struct AssistanceExercise: Identifiable, Codable, Hashable {
     var source: AssistanceSource = .builtIn  // built-in unless user creates/imports
     var createdAt: Date = Date()
     var version: Int = 1
+    
+    // NEW
+    var equipment: EquipmentKind = .bodyweight
+    /// If equipment == .barbell and you want a non-45 bar, set this. Otherwise nil.
+    var barWeightOverride: Double? = nil
 
     // ---- Initializers ----
-
-    /// 1) Back-compat: exact signature you already use in `catalog`.
-    ///    This lets your existing `catalog` compile with zero edits.
+    // 1) Back-compat init (existing)
     init(id: String,
          name: String,
          defaultWeight: Double,
@@ -40,7 +48,9 @@ struct AssistanceExercise: Identifiable, Codable, Hashable {
          allowWeightToggle: Bool,
          toggledWeight: Double,
          usesImpliedImplements: Bool,
-         category: ExerciseCategory) {
+         category: ExerciseCategory,
+         equipment: EquipmentKind = .bodyweight,
+         barWeightOverride: Double? = nil) {
         self.id = id
         self.name = name
         self.defaultWeight = defaultWeight
@@ -49,14 +59,16 @@ struct AssistanceExercise: Identifiable, Codable, Hashable {
         self.toggledWeight = toggledWeight
         self.usesImpliedImplements = usesImpliedImplements
         self.category = category
-        self.areas = []                 // can be filled later
-        self.tags = []                  // can be filled later
+        self.areas = []
+        self.tags = []
         self.source = .builtIn
         self.createdAt = Date()
         self.version = 1
+        self.equipment = equipment
+        self.barWeightOverride = barWeightOverride
     }
 
-    /// 2) Creator-friendly: use this when the user adds a custom exercise.
+    // 2) Creator-friendly init (existing)
     init(id: String,
          name: String,
          defaultWeight: Double,
@@ -67,7 +79,9 @@ struct AssistanceExercise: Identifiable, Codable, Hashable {
          category: ExerciseCategory,
          areas: Set<FocusArea>,
          tags: Set<AssistanceTag>,
-         authorDisplayName: String?) {
+         authorDisplayName: String?,
+         equipment: EquipmentKind = .bodyweight,
+         barWeightOverride: Double? = nil) {
         self.id = id
         self.name = name
         self.defaultWeight = defaultWeight
@@ -81,6 +95,14 @@ struct AssistanceExercise: Identifiable, Codable, Hashable {
         self.source = .userCreated(author: authorDisplayName)
         self.createdAt = Date()
         self.version = 1
+        self.equipment = equipment
+        self.barWeightOverride = barWeightOverride
+    }
+    
+    var isBarbell: Bool { equipment == .barbell }
+    
+    func effectiveBarWeight(defaultBar: Double = 45) -> Double {
+        barWeightOverride ?? defaultBar
     }
 }
 

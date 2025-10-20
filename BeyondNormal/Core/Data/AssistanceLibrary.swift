@@ -45,7 +45,9 @@ final class AssistanceLibrary: ObservableObject {
              category: ExerciseCategory,
              areas: Set<FocusArea>,
              tags: Set<AssistanceTag>,
-             authorDisplayName: String?) {
+             authorDisplayName: String?,
+             equipment: EquipmentKind = .bodyweight,
+             barWeightOverride: Double? = nil) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isDuplicate(name: trimmed, category: category) else { return }
 
@@ -60,7 +62,9 @@ final class AssistanceLibrary: ObservableObject {
             category: category,
             areas: areas,
             tags: tags,
-            authorDisplayName: authorDisplayName
+            authorDisplayName: authorDisplayName,
+            equipment: equipment,
+            barWeightOverride: barWeightOverride
         )
         userCreated.append(new)
         save()

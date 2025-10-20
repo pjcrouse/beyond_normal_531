@@ -16,6 +16,9 @@ struct NewAssistanceSheet: View {
     @State private var category: ExerciseCategory = .core
     @State private var defaultWeight: Double = 0       // 0 = bodyweight / machine stack TBD
     @State private var defaultReps: Int = 10
+    
+    @State private var equipment: EquipmentKind = .bodyweight
+    @State private var barWeightText: String = "45"   // default shown only if barbell
 
     @AppStorage("creatorDisplayName") private var authorName: String = ""
 
@@ -50,6 +53,28 @@ struct NewAssistanceSheet: View {
                     Stepper("Default Weight: \(Int(defaultWeight)) lb",
                             value: $defaultWeight, in: 0...500, step: 5)
                 }
+                Section("Equipment") {
+                    Picker("Type", selection: $equipment) {
+                        ForEach(EquipmentKind.allCases, id: \.self) { kind in
+                            Text(kind.rawValue.capitalized).tag(kind)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    if equipment == .barbell {
+                        HStack {
+                            Text("Bar Weight")
+                            Spacer()
+                            TextField("45", text: $barWeightText)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 80)
+                        }
+                        Text("Leave as 45 if you use a standard bar.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
             .onAppear {
                 if let c = preselectedCategory { category = c }
@@ -68,8 +93,11 @@ struct NewAssistanceSheet: View {
     }
 
     private func saveAndClose() {
-        // We keep areas/tags empty for now; model stays forward-compatible.
-        // Toggle fields are set to safe defaults; UI always allows manual edits during the workout anyway.
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let barOverride = (equipment == .barbell) ? (Double(barWeightText) ?? 45) : nil
+
         library.add(name: name,
                     defaultWeight: defaultWeight,
                     defaultReps: defaultReps,
@@ -79,7 +107,9 @@ struct NewAssistanceSheet: View {
                     category: category,
                     areas: [],
                     tags: [],
-                    authorDisplayName: authorName.isEmpty ? nil : authorName)
+                    authorDisplayName: authorName.isEmpty ? nil : authorName,
+                    equipment: equipment,
+                    barWeightOverride: barOverride)
         dismiss()
     }
 }
