@@ -16,7 +16,8 @@ struct BeyondNormalApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(assistanceLibrary)
-                .environmentObject(settings) 
+                .environmentObject(settings)
+                .tint(Color.accentColor)
         }
     }
 }

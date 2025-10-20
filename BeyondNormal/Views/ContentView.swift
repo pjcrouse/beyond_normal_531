@@ -2,6 +2,7 @@ import SwiftUI
 import Foundation
 import Combine
 import UserNotifications
+import UIKit
 
 // MARK: - Main View
 
@@ -37,9 +38,11 @@ struct ContentView: View {
     @AppStorage("assist_row_id")      private var assistRowID: String = "spider_curls"
     @AppStorage("assist_press_id") private var assistPressID: String = "triceps_ext" // safe default
     
-    // Configurable workouts per week support
-    @AppStorage("workouts_per_week") private var workoutsPerWeek: Int = 4   // 3, 4, or 5
-    @AppStorage("fourth_lift")       private var fourthLiftRaw: String = "row" // "row" | "press"
+    // Configurable workouts per week support (now sourced from ProgramSettings)
+    private var workoutsPerWeek: Int { settings.workoutsPerWeek }   // 3, 4, or 5
+    private var fourthLift: Lift {
+            settings.fourthLiftRaw.lowercased() == "press" ? .press : .row
+        }
     
     // Fix for cycle/week
     @AppStorage("current_cycle") private var currentCycle: Int = 1
@@ -77,6 +80,14 @@ struct ContentView: View {
     // If you already store the user’s display name somewhere, use that.
     // For now, a placeholder:
     @AppStorage("user_display_name") private var userDisplayName: String = ""
+    
+    // Workout/cycle completion
+    @State private var toastText: String?
+    @State private var showToast: Bool = false
+    
+    @State private var showCycleSummary = false
+    @State private var cycleSummaryLines: [String] = []
+    @State private var cycleAdvancedFrom: Int = 1
     
     private var isUpper: (Lift) -> Bool { { $0 == .bench || $0 == .press || $0 == .row } }
     private var isLower: (Lift) -> Bool { { $0 == .squat || $0 == .deadlift } }
@@ -117,8 +128,15 @@ struct ContentView: View {
         }
     }
     
-    private func applyTMProgressionForNewCycle(from oldCycle: Int) {
-        let liftsToProgress = activeLifts  // only what the program actually used
+    // Returns per-lift TM change lines you can show in a toast.
+    private func applyTMProgressionForNewCycle(from oldCycle: Int) -> [String] {
+        var lines: [String] = []
+
+        // Capture pre-bump values for just the lifts you’ll progress
+        let liftsToProgress = activeLifts
+        let before: [Lift: Double] = [
+            .squat: tmSquat, .bench: tmBench, .deadlift: tmDeadlift, .row: tmRow, .press: tmPress
+        ]
 
         switch settings.progressionStyle {
         case .classic:
@@ -126,7 +144,6 @@ struct ContentView: View {
                 let bumped = getTM(lift) + classicBumpAmount(for: lift)
                 setTM(lift, bumped)
             }
-            return
 
         case .auto:
             for lift in liftsToProgress {
@@ -145,10 +162,14 @@ struct ContentView: View {
                 setTM(lift, currentTM + delta)
             }
         }
-    }
-    
-    private var fourthLift: Lift {
-        fourthLiftRaw.lowercased() == "press" ? .press : .row
+
+        // Build change lines for the lifts we progressed
+        for lift in liftsToProgress {
+            if let old = before[lift] {
+                lines.append( tmChangeLine(lift.label, old, getTM(lift)) )
+            }
+        }
+        return lines
     }
     
     private var activeLifts: [Lift] {
@@ -206,12 +227,16 @@ struct ContentView: View {
                     Button { showHistory = true } label: {
                         Label("History", systemImage: "clock.arrow.circlepath")
                     }
+                    .labelStyle(.iconOnly)
+                    .tint(Color.brandAccent)
                     .accessibilityLabel("History")
                 }
                 ToolbarItem(placement: .topBarLeading) {
                     Button { showDataManagement = true } label: {
                         Label("Data", systemImage: "externaldrive.fill")
                     }
+                    .tint(Color.brandAccent)
+                    .accessibilityLabel("History")
                     .accessibilityLabel("Data Management")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -237,7 +262,21 @@ struct ContentView: View {
                     .accessibilityLabel("PRs")
                 }
             }
+            .overlay(alignment: .top) {
+                if showToast, let text = toastText {
+                    Toast(text: text)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .onAppear {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                withAnimation { showToast = false }
+                            }
+                        }
+                        .padding(.top, 8)
+                        .padding(.horizontal)
+                }
+            }
         }
+        .tint(Color.brandAccent) // optional: global for everything inside the NavigationStack
         .sheet(isPresented: $showSettings) {
             SettingsSheet()
                 .environmentObject(settings)        // already injected from App root, but explicit is fine
@@ -264,6 +303,16 @@ struct ContentView: View {
         .sheet(isPresented: $showDataManagement) {
             DataManagementView()
                 .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showCycleSummary) {
+            CycleSummaryView(
+                fromCycle: cycleAdvancedFrom,
+                toCycle: currentCycle,
+                style: settings.progressionStyle,
+                lines: cycleSummaryLines
+            )
+            .presentationDetents([.medium, .large])
+            .preferredColorScheme(.dark)
         }
         .alert("Reset current lift?", isPresented: $showResetConfirm) {
             Button("Reset", role: .destructive) { resetCurrentLift() }
@@ -293,12 +342,12 @@ struct ContentView: View {
                 selectedLift = activeLifts.first ?? .bench
             }
         }
-        .onChange(of: workoutsPerWeek) { _, _ in
+        .onChange(of: settings.workoutsPerWeek) { _, _ in
             if !activeLifts.contains(selectedLift) {
                 selectedLift = activeLifts.first ?? .bench
             }
         }
-        .onChange(of: fourthLiftRaw) { _, _ in
+        .onChange(of: settings.fourthLiftRaw) { _, _ in
             if !activeLifts.contains(selectedLift) {
                 selectedLift = activeLifts.first ?? .bench
             }
@@ -687,12 +736,25 @@ struct ContentView: View {
                     savedAlertText += "\n\n🏆 New PR: \(Int(round(newPR.value))) lb \(lt.rawValue.capitalized)"
                     showSavedAlert = true        // ✅ actually show the alert
                 }
-                return
             }
         }
+        
+        // Run auto-advance and decide what to present
+        let outcome = maybeAutoAdvanceAfterFinish()
 
-        // ✅ No PR: still show “Saved” confirmation
-        showSavedAlert = true
+        switch outcome {
+        case .none:
+            // No week/cycle movement → safe to show the simple Saved alert
+            showSavedAlert = true
+
+        case .weekAdvanced:
+            // We already showed a toast — skip the Saved alert so the toast isn’t hidden
+            break
+
+        case .cycleAdvanced:
+            // We already showed a toast + will show the celebration sheet — skip the Saved alert
+            break
+        }
     }
         
         // ... rest of the method stays the same ...
@@ -721,6 +783,81 @@ struct ContentView: View {
             guard allowTimerStarts, timer.allowStarts else { return }
             timer.start(seconds: seconds)
         }
+
+    // MARK: - Auto-advance helpers (history-derived)
+
+    // Week is complete when there's a saved entry for every active main lift in that week.
+    private func isWeekCompleteInHistory(week: Int) -> Bool {
+        let mains = Set(activeLifts.map { $0.label.lowercased() })
+        let historyArray: [WorkoutEntry] = WorkoutStore.shared.workouts
+        var completed = Set<String>()  // lowercased lift labels
+
+        for entry in historyArray {
+            if entry.cycle == currentCycle && entry.programWeek == week {
+                completed.insert(entry.lift.lowercased())
+            }
+        }
+        return completed.isSuperset(of: mains)
+    }
+
+    // Cycle complete if weeks 1..3 are complete (change to 1..4 if deload is required).
+    private func isCycleCompleteInHistory() -> Bool {
+        if !isWeekCompleteInHistory(week: 1) { return false }
+        if !isWeekCompleteInHistory(week: 2) { return false }
+        if !isWeekCompleteInHistory(week: 3) { return false }
+        if !isWeekCompleteInHistory(week: 4) { return false }
+        return true
+    }
+
+    // Decide what to advance after finishing a workout.
+    private func maybeAutoAdvanceAfterFinish() -> AdvanceOutcome {
+        // 1) Cycle completion takes precedence
+        if isCycleCompleteInHistory() {
+            let old = currentCycle
+
+            // Apply TM progression and collect change lines for the summary
+            let changes = applyTMProgressionForNewCycle(from: old)
+
+            // Move to next cycle
+            currentCycle += 1
+            currentWeek = 1
+
+            // Fresh week 1 state
+            clearAllCompletionFor(week: currentWeek)
+
+            // Reset PR window for new cycle (optional)
+            PRStore.shared.resetCycle(currentCycle)
+
+            // Haptic success
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+
+            // Short headline toast
+            let styleShort = (settings.progressionStyle == .classic) ? "Classic" : "Auto"
+            toast("Cycle \(old) complete → Cycle \(currentCycle) (\(styleShort))")
+
+            // Full celebration sheet
+            cycleAdvancedFrom = old
+            cycleSummaryLines = changes
+            showCycleSummary = true
+
+            return .cycleAdvanced(from: old, to: currentCycle, lines: changes)
+        }
+
+        // 2) Otherwise advance week if setting is on and week is complete (allow 1→2→3→4)
+        if autoAdvanceWeek && isWeekCompleteInHistory(week: currentWeek) {
+            let maxWeek = 4
+            if currentWeek < maxWeek {
+                let next = currentWeek + 1
+                currentWeek = next
+                clearAllCompletionFor(week: next)
+                toast("Week \(next - 1) complete → Week \(next)")
+                return .weekAdvanced(nextWeek: next)
+            }
+        }
+
+        return .none
+    }
+    
 #if DEBUG
         /// Auto-fills ONLY the current workout (selectedLift @ currentWeek).
         private func debugAutofillCurrentWorkout() {
@@ -765,4 +902,156 @@ struct ContentView: View {
             }
         }
 #endif
+    
+    private struct Toast: View {
+        let text: String
+
+        var body: some View {
+            let brand = Color(hex: "E55722")  // Your specific orange
+
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(brand)
+                
+                Text(text)
+                    .font(.callout.weight(.semibold))
+                    .lineLimit(2)
+                    .foregroundStyle(brand)
+            }
+            .padding(.vertical, 10)
+            .padding(.horizontal, 14)
+            .background(
+                Color.black.opacity(0.18),
+                in: Capsule()
+            )
+            .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+            .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
+        }
+    }
+
+    private func toast(_ s: String) {
+        toastText = s
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
+            showToast = true
+        }
+    }
+    
+    private struct CycleSummaryView: View {
+        let fromCycle: Int
+        let toCycle: Int
+        let style: ProgressionStyle
+        let lines: [String]  // e.g., ["Squat: 315 → 325 ↑10", "Bench: 225 → 230 ↑5"]
+
+        var body: some View {
+            NavigationStack {
+                VStack(spacing: 16) {
+                    // 🔥 Flame icon in brand orange
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 42))
+                        .symbolRenderingMode(.monochrome)
+                        .foregroundColor(Color(hex: "#e55722"))
+
+                    // 🧱 Headline
+                    Text("Cycle \(fromCycle) complete!")
+                        .font(.title2.bold())
+                        .foregroundColor(Color(hex: "#e55722"))
+
+                    // 🧩 Subheadline
+                    Text("Welcome to Cycle \(toCycle) \(styleLabel)")
+                        .font(.headline)
+                        .foregroundColor(Color(hex: "#2c7f7a")) // teal secondary tone
+
+                    Divider()
+                        .overlay(Color(hex: "#e55722").opacity(0.15))
+                        .padding(.vertical, 4)
+
+                    // 📈 TM change lines
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(lines, id: \.self) { line in
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Image(systemName: "arrow.up.right.circle.fill")
+                                    .imageScale(.medium)
+                                    .symbolRenderingMode(.monochrome)
+                                    .foregroundColor(Color(hex: "#e55722"))
+
+                                // Highlight the delta (last token) in orange
+                                let parts = line.split(separator: " ")
+                                if let last = parts.last {
+                                    let prefix = parts.dropLast().joined(separator: " ")
+                                    Text(prefix + " ")
+                                        .font(.body.monospaced())
+                                    Text(String(last))
+                                        .font(.body.monospaced().weight(.semibold))
+                                        .foregroundColor(Color(hex: "#e55722"))
+                                } else {
+                                    Text(line).font(.body.monospaced())
+                                }
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color.black.opacity(0.2))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .strokeBorder(Color(hex: "#e55722").opacity(0.1), lineWidth: 1)
+                    )
+
+                    Spacer(minLength: 8)
+
+                    // 🪶 Footer
+                    Text("Keep momentum. Deload completed and TMs updated — time to build again.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .padding()
+                .navigationTitle("Training Max Updates")
+                .navigationBarTitleDisplayMode(.inline)
+            }
+        }
+
+        private var styleLabel: String {
+            switch style {
+            case .classic: return "(Classic +5/+10)"
+            case .auto:    return "(Auto from PRs)"
+            }
+        }
+    }
+    
+    private enum AdvanceOutcome {
+        case none
+        case weekAdvanced(nextWeek: Int)
+        case cycleAdvanced(from: Int, to: Int, lines: [String])
+    }
+    
+    private func clearAllCompletionFor(week: Int) {
+        for lift in activeLifts {
+            let key = lift.rawValue
+
+            // Main: sets 1..3 (plus BBB 4..8 when present)
+            for mainSet in 1...8 {
+                workoutState.setSetComplete(lift: key, week: week, set: mainSet, value: false)
+            }
+
+            // BBB weight/reps (1..5) — optional, remove if you prefer to keep last-used weights
+            for b in 1...5 {
+                workoutState.setBBBWeight(lift: key, week: week, set: b, weight: nil)
+                workoutState.setBBBReps(lift: key, week: week, set: b, reps: nil)
+            }
+
+            // Assistance: sets 1..3 + weight/reps/useWeight
+            for a in 1...3 {
+                workoutState.setAssistComplete(lift: key, week: week, set: a, value: false)
+                workoutState.setAssistWeight(lift: key, week: week, set: a, weight: nil)
+                workoutState.setAssistReps(lift: key, week: week, set: a, reps: nil)
+            }
+            workoutState.setAssistUseWeight(lift: key, week: week, useWeight: false)
+
+            // AMRAP
+            workoutState.setAMRAP(lift: key, week: week, reps: 0)
+        }
+    }
     }

@@ -14,14 +14,22 @@ extension Color {
         case 8: // ARGB (32-bit)
             (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
         default:
-            (a, r, g, b) = (255, 0, 0, 0)
+            (a, r, g, b) = (1, 1, 1, 0)
         }
+
         self.init(
             .sRGB,
             red: Double(r) / 255,
             green: Double(g) / 255,
-            blue: Double(b) / 255,
+            blue:  Double(b) / 255,
             opacity: Double(a) / 255
         )
     }
+}
+
+extension Color {
+    static let brandAccent = Color(hex: "#e55722") // orange
+    static let brandTeal   = Color(hex: "#2c7f7a")
+    static let brandSlate  = Color(hex: "#36454f")
+    static let brandPaper  = Color(hex: "#fafaf0")
 }
