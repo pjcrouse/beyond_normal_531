@@ -4,6 +4,11 @@ import Combine
 import UserNotifications
 import UIKit
 
+extension UIApplication {
+    func endEditing() {
+        sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+}
 // MARK: - Main View
 
 struct ContentView: View {
@@ -320,6 +325,29 @@ struct ContentView: View {
         } message: { text in
             Text(text)
         }
+        .safeAreaInset(edge: .bottom) {
+            if notesFocused || amrapFocused {
+                HStack {
+                    Spacer()
+                    Button {
+                        amrapFocused = false
+                        notesFocused = false
+                        UIApplication.shared.endEditing()   // <- universal keyboard dismiss
+                    } label: {
+                        Label("Done", systemImage: "keyboard.chevron.compact.down")
+                            .font(.headline)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(.ultraThinMaterial, in: Capsule())
+                    }
+                    Spacer()
+                }
+                .padding(.bottom, 6)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(1)
+            }
+        }
+        .animation(.easeInOut, value: notesFocused || amrapFocused)
         .onAppear {
             let center = UNUserNotificationCenter.current()
             center.delegate = LocalNotifDelegate.shared
