@@ -9,15 +9,12 @@ import UIKit
 struct ContentView: View {
     @EnvironmentObject private var settings: ProgramSettings
     // Training inputs
-    @AppStorage("tm_squat")    private var tmSquat: Double = 315
-    @AppStorage("tm_bench")    private var tmBench: Double = 225
-    @AppStorage("tm_deadlift") private var tmDeadlift: Double = 405
-    @AppStorage("tm_row")      private var tmRow: Double = 185
-    @AppStorage("tm_press") private var tmPress: Double = 135
+    private var roundTo: Double { settings.roundTo }
+    private var bbbPct: Double { settings.bbbPercent }
+    private var timerRegularSec: Int { settings.timerRegularSec }
+    private var timerBBBsec: Int { settings.timerBBBSec }
+    private var autoAdvanceWeek: Bool { settings.autoAdvanceWeek }
     
-    @AppStorage("bar_weight")  private var barWeight: Double = 45
-    @AppStorage("round_to")    private var roundTo: Double = 5
-    @AppStorage("bbb_pct")     private var bbbPct: Double = 0.50
     
     // Assistance defaults (legacy)
     @AppStorage("assist_weight_squat")    private var assistWeightSquat: Double = 0
@@ -25,11 +22,7 @@ struct ContentView: View {
     @AppStorage("assist_weight_deadlift") private var assistWeightDeadlift: Double = 0
     @AppStorage("assist_weight_row")      private var assistWeightRow: Double = 0
     
-    @AppStorage("timer_regular_sec") private var timerRegularSec: Int = 180
-    @AppStorage("timer_bbb_sec")     private var timerBBBsec: Int = 120
     @AppStorage("current_week")      private var currentWeek: Int = 1
-    
-    @AppStorage("auto_advance_week")    private var autoAdvanceWeek: Bool = true
     
     // Selected assistance by main lift
     @AppStorage("assist_squat_id")    private var assistSquatID: String = "split_squat"
@@ -89,6 +82,8 @@ struct ContentView: View {
     @State private var cycleSummaryLines: [String] = []
     @State private var cycleAdvancedFrom: Int = 1
     
+    @State private var weightsVersion = 0
+    
     private var isUpper: (Lift) -> Bool { { $0 == .bench || $0 == .press || $0 == .row } }
     private var isLower: (Lift) -> Bool { { $0 == .squat || $0 == .deadlift } }
     
@@ -109,22 +104,22 @@ struct ContentView: View {
     // Read/write TMs by lift
     private func getTM(_ lift: Lift) -> Double {
         switch lift {
-        case .squat: return tmSquat
-        case .bench: return tmBench
-        case .deadlift: return tmDeadlift
-        case .row: return tmRow
-        case .press: return tmPress
+        case .squat: return settings.tmSquat
+        case .bench: return settings.tmBench
+        case .deadlift: return settings.tmDeadlift
+        case .row: return settings.tmRow
+        case .press: return settings.tmPress
         }
     }
     
     private func setTM(_ lift: Lift, _ value: Double) {
         let v = max(45, value.rounded())  // keep sane & whole lbs
         switch lift {
-        case .squat: tmSquat = v
-        case .bench: tmBench = v
-        case .deadlift: tmDeadlift = v
-        case .row: tmRow = v
-        case .press: tmPress = v
+        case .squat: settings.tmSquat = v
+        case .bench: settings.tmBench = v
+        case .deadlift: settings.tmDeadlift = v
+        case .row: settings.tmRow = v
+        case .press: settings.tmPress = v
         }
     }
     
@@ -135,7 +130,7 @@ struct ContentView: View {
         // Capture pre-bump values for just the lifts you’ll progress
         let liftsToProgress = activeLifts
         let before: [Lift: Double] = [
-            .squat: tmSquat, .bench: tmBench, .deadlift: tmDeadlift, .row: tmRow, .press: tmPress
+            .squat: settings.tmSquat, .bench: settings.tmBench, .deadlift: settings.tmDeadlift, .row: settings.tmRow, .press: settings.tmPress
         ]
 
         switch settings.progressionStyle {
@@ -358,6 +353,16 @@ struct ContentView: View {
         .onChange(of: liveRepsText) { _, _ in
             saveReps(liveRepsText, for: selectedLift)
         }
+        .onChange(of: settings.tmSquat) { _, _ in weightsVersion += 1 }
+        .onChange(of: settings.tmBench) { _, _ in weightsVersion += 1 }
+        .onChange(of: settings.tmDeadlift) { _, _ in weightsVersion += 1 }
+        .onChange(of: settings.tmRow) { _, _ in weightsVersion += 1 }
+        .onChange(of: settings.tmPress) { _, _ in weightsVersion += 1 }
+
+        .onChange(of: settings.roundTo) { _, _ in weightsVersion += 1 }
+        .onChange(of: settings.bbbPercent) { _, _ in weightsVersion += 1 }
+        
+        .onReceive(implements.objectWillChange) { _ in weightsVersion &+= 1 }
     }
     
     // MARK: - Main scroll content (split out)
@@ -371,11 +376,11 @@ struct ContentView: View {
             headerView
             
             TrainingMaxesLine(
-                tmSquat: tmSquat,
-                tmBench: tmBench,
-                tmDeadlift: tmDeadlift,
-                tmRow: tmRow,
-                tmPress: tmPress,
+                tmSquat: settings.tmSquat,
+                tmBench: settings.tmBench,
+                tmDeadlift: settings.tmDeadlift,
+                tmRow: settings.tmRow,
+                tmPress: settings.tmPress,
                 activeLifts: activeLifts
             )
             
@@ -435,6 +440,7 @@ struct ContentView: View {
                     startRest(secs, fromUser: fromUser)
                 }
             )
+            .id(weightsVersion)
             
             AssistanceBlock(
                 selectedLift: $selectedLift,
@@ -468,6 +474,7 @@ struct ContentView: View {
                     startRest(secs, fromUser: fromUser)
                 }
             )
+            .id(weightsVersion)
             
             SummaryCard(
                 date: .now,
@@ -569,11 +576,11 @@ struct ContentView: View {
     
     private func tmFor(_ lift: Lift) -> Double {
         switch lift {
-        case .squat: return tmSquat
-        case .bench: return tmBench
-        case .deadlift: return tmDeadlift
-        case .row: return tmRow
-        case .press:    return tmPress
+        case .squat:   return settings.tmSquat
+        case .bench:   return settings.tmBench
+        case .deadlift:return settings.tmDeadlift
+        case .row:     return settings.tmRow
+        case .press:   return settings.tmPress
         }
     }
     
