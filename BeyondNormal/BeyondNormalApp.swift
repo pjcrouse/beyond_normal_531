@@ -10,10 +10,14 @@ import SwiftUI
 @main
 struct BeyondNormalApp: App {
     @StateObject private var assistanceLibrary = AssistanceLibrary.shared
+    @StateObject private var settings = ProgramSettings()
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(assistanceLibrary)
+                .environmentObject(settings)
+                .tint(Color.accentColor)
         }
     }
 }

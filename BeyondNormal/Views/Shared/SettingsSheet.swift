@@ -1,37 +1,11 @@
 import SwiftUI
 
 struct SettingsSheet: View {
-    @AppStorage("current_cycle") private var currentCycle: Int = 1
+    @EnvironmentObject var settings: ProgramSettings
+    @Environment(\.dismiss) private var dismiss
+    @FocusState private var focusedField: Field?
 
-    @Binding var tmSquat: Double
-    @Binding var tmBench: Double
-    @Binding var tmDeadlift: Double
-    @Binding var tmRow: Double
-    @Binding var tmPress: Double
-    @Binding var barWeight: Double
-    @Binding var roundTo: Double
-    @Binding var bbbPct: Double
-    @Binding var timerRegularSec: Int
-    @Binding var timerBBBsec: Int
-    @Binding var tmProgStyleRaw: String
-    @Binding var autoAdvanceWeek: Bool
-    @Binding var oneRMFormulaRaw: String
-
-    // Assistance
-    @Binding var assistSquatID: String
-    @Binding var assistBenchID: String
-    @Binding var assistDeadliftID: String
-    @Binding var assistRowID: String
-    @Binding var assistPressID: String
-
-    // Program config
-    @Binding var workoutsPerWeek: Int        // 3, 4, or 5
-    @Binding var fourthLiftRaw: String       // "row" | "press"
-
-    // User profile
-    @Binding var userDisplayName: String
-
-    // Temp strings for numeric fields
+    // Temp strings for numeric TextFields (to avoid fighting the keyboard)
     @State private var tmpSquat = ""
     @State private var tmpBench = ""
     @State private var tmpDeadlift = ""
@@ -41,9 +15,6 @@ struct SettingsSheet: View {
     @State private var tmpRoundTo = ""
     @State private var tmpTimerRegular = ""
     @State private var tmpTimerBBB = ""
-
-    @Environment(\.dismiss) private var dismiss
-    @FocusState private var focusedField: Field?
 
     enum Field {
         case squat, bench, deadlift, row, press, barWeight, roundTo, timerRegular, timerBBB
@@ -67,7 +38,17 @@ struct SettingsSheet: View {
                 prsSection
                 helpSection
             }
+            .navigationTitle("Settings")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Save") {
+                        saveAndClose()
+                        settings.save()
+                    }.bold()
+                }
                 if focusedField != nil {
                     ToolbarItemGroup(placement: .keyboard) {
                         Spacer()
@@ -75,27 +56,18 @@ struct SettingsSheet: View {
                     }
                 }
             }
-            .navigationTitle("Settings")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Save") { saveAndClose() }.bold()
-                }
-            }
             .onAppear(perform: onAppearSetup)
         }
     }
 
-    // MARK: - Sections (split for compiler sanity)
+    // MARK: - Sections
 
     private var profileSection: some View {
         Section("Profile") {
             HStack {
                 Text("Display Name")
                 Spacer()
-                TextField("Your name", text: $userDisplayName)
+                TextField("Your name", text: $settings.userDisplayName)
                     .multilineTextAlignment(.trailing)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.words)
@@ -118,15 +90,15 @@ struct SettingsSheet: View {
 
     private var workoutsPerWeekSection: some View {
         Section("Workouts per Week") {
-            Picker("Count", selection: $workoutsPerWeek) {
+            Picker("Count", selection: $settings.workoutsPerWeek) {
                 Text("3 days").tag(3)
                 Text("4 days").tag(4)
                 Text("5 days").tag(5)
             }
             .pickerStyle(.segmented)
 
-            if workoutsPerWeek == 4 {
-                Picker("4th Workout", selection: $fourthLiftRaw) {
+            if settings.workoutsPerWeek == 4 {
+                Picker("4th Workout", selection: $settings.fourthLiftRaw) {
                     Text("Row").tag("row")
                     Text("Press").tag("press")
                 }
@@ -135,7 +107,7 @@ struct SettingsSheet: View {
                 Text("If 4 days: choose Row or Standing Press for Day 4.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            } else if workoutsPerWeek == 5 {
+            } else if settings.workoutsPerWeek == 5 {
                 Text("5 days include both Row and Standing Press.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -162,9 +134,9 @@ struct SettingsSheet: View {
             HStack {
                 Text("BBB % of TM")
                 Spacer()
-                Text("\(Int(bbbPct * 100))%").foregroundStyle(.secondary)
+                Text("\(Int(settings.bbbPercent * 100))%").foregroundStyle(.secondary)
             }
-            Slider(value: $bbbPct, in: 0.50...0.70, step: 0.05)
+            Slider(value: $settings.bbbPercent, in: 0.50...0.70, step: 0.05)
         }
     }
 
@@ -200,10 +172,10 @@ struct SettingsSheet: View {
 
     private var oneRMSection: some View {
         Section(header: Text("1RM Formula")) {
-            Picker("Estimation Formula", selection: $oneRMFormulaRaw) {
-                Text("Epley").tag("epley")
-                Text("Brzycki").tag("brzycki")
-                Text("Mayhew").tag("mayhew")
+            Picker("Estimation Formula", selection: $settings.oneRMFormula) {
+                ForEach(OneRepMaxFormula.allCases, id: \.self) { f in
+                    Text(f.displayName).tag(f)
+                }
             }
             .pickerStyle(.segmented)
 
@@ -215,61 +187,69 @@ struct SettingsSheet: View {
 
     private var tmProgressionSection: some View {
         Section("TM Progression Style") {
-            Picker("Style", selection: $tmProgStyleRaw) {
-                Text("Classic (+5/+10)").tag("classic")
-                Text("Auto (90% of AMRAP 1RM)").tag("auto")
+            Picker("Style", selection: $settings.progressionStyle) {
+                Text("Classic (+5/+10)").tag(ProgressionStyle.classic)
+                Text("Auto (from PRs)").tag(ProgressionStyle.auto)
             }
             .pickerStyle(.segmented)
-            Text("Classic = steady +5 upper / +10 lower per cycle.\nAuto = set TM to 90% of latest AMRAP est. 1RM (capped at +10 upper / +20 lower).")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+
+            if settings.progressionStyle == .auto {
+                Stepper(value: $settings.autoTMPercent, in: 80...95, step: 1) {
+                    Text("TM = \(settings.autoTMPercent)% of est-1RM")
+                }
+                Text("Classic = steady +5 upper / +10 lower per cycle.\nAuto = set TM to a % of latest AMRAP est. 1RM (capped).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Classic = steady +5 upper / +10 lower per cycle.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
     private var assistanceSection: some View {
         Section("Assistance Exercises") {
-            // Always present for SQ/BP/DL
             NavigationLink("Squat Day") {
                 ExercisePickerView(
                     title: "Choose Squat Assistance",
-                    selectedID: $assistSquatID,
+                    selectedID: $settings.assistSquatID,
                     allowedCategories: [.legs]
                 )
             }
             NavigationLink("Bench Day") {
                 ExercisePickerView(
                     title: "Choose Bench Assistance",
-                    selectedID: $assistBenchID,
+                    selectedID: $settings.assistBenchID,
                     allowedCategories: [.push]
                 )
             }
             NavigationLink("Deadlift Day") {
                 ExercisePickerView(
                     title: "Choose Deadlift Assistance",
-                    selectedID: $assistDeadliftID,
+                    selectedID: $settings.assistDeadliftID,
                     allowedCategories: [.legs, .core]
                 )
             }
 
-            // 4th/5th day logic
-            if workoutsPerWeek == 4 {
-                if fourthLiftRaw == "row" {
+            if settings.workoutsPerWeek == 4 {
+                if settings.fourthLiftRaw == "row" {
                     rowPickerLink
                 } else {
                     pressPickerLink
                 }
-            } else if workoutsPerWeek >= 5 {
+            } else if settings.workoutsPerWeek >= 5 {
                 rowPickerLink
                 pressPickerLink
             }
 
             Button {
                 // Restore recommended defaults
-                assistSquatID = "split_squat"
-                assistBenchID = "triceps_ext"
-                assistDeadliftID = "back_ext"
-                assistRowID = "spider_curls"
-                assistPressID = "triceps_ext"
+                settings.assistSquatID   = "split_squat"
+                settings.assistBenchID   = "triceps_ext"
+                settings.assistDeadliftID = "back_ext"
+                settings.assistRowID     = "spider_curls"
+                settings.assistPressID   = "triceps_ext"
             } label: {
                 Label("Restore Recommended", systemImage: "arrow.counterclockwise")
             }
@@ -280,7 +260,7 @@ struct SettingsSheet: View {
         NavigationLink("Row Day") {
             ExercisePickerView(
                 title: "Choose Row Assistance",
-                selectedID: $assistRowID,
+                selectedID: $settings.assistRowID,
                 allowedCategories: [.pull]
             )
         }
@@ -290,7 +270,7 @@ struct SettingsSheet: View {
         NavigationLink("Press Day") {
             ExercisePickerView(
                 title: "Choose Press Assistance",
-                selectedID: $assistPressID,
+                selectedID: $settings.assistPressID,
                 allowedCategories: [.push]
             )
         }
@@ -309,7 +289,7 @@ struct SettingsSheet: View {
 
     private var behaviorSection: some View {
         Section("Behavior") {
-            Toggle("Auto-advance week after finishing workout", isOn: $autoAdvanceWeek)
+            Toggle("Auto-advance week after finishing workout", isOn: $settings.autoAdvanceWeek)
         }
     }
 
@@ -330,10 +310,7 @@ struct SettingsSheet: View {
     private var prsSection: some View {
         Section("Personal Records") {
             Button(role: .destructive) {
-                // Use the signature you actually implemented:
-                // If you wrote `func resetCycle(_ cycle: Int)`, call:
-                PRStore.shared.resetCycle(currentCycle)
-                // If you wrote `resetCycle(currentCycle:)`, swap to that.
+                PRStore.shared.resetCycle(settings.currentCycle)
             } label: {
                 Label("Reset Current Cycle PRs", systemImage: "arrow.counterclockwise")
             }
@@ -365,40 +342,36 @@ struct SettingsSheet: View {
     }
 
     private func onAppearSetup() {
-        // One-time migration
-        if oneRMFormulaRaw.lowercased() == "wendler" {
-            oneRMFormulaRaw = "epley"
-        }
-        // Seed temp fields
-        tmpSquat = String(format: "%.0f", tmSquat)
-        tmpBench = String(format: "%.0f", tmBench)
-        tmpDeadlift = String(format: "%.0f", tmDeadlift)
-        tmpRow = String(format: "%.0f", tmRow)
-        tmpPress = String(format: "%.0f", tmPress)
-        tmpBarWeight = String(format: "%.0f", barWeight)
-        tmpRoundTo = String(format: "%.0f", roundTo)
-        tmpTimerRegular = String(timerRegularSec)
-        tmpTimerBBB = String(timerBBBsec)
+        // Seed temp fields from settings
+        tmpSquat = String(format: "%.0f", settings.tmSquat)
+        tmpBench = String(format: "%.0f", settings.tmBench)
+        tmpDeadlift = String(format: "%.0f", settings.tmDeadlift)
+        tmpRow = String(format: "%.0f", settings.tmRow)
+        tmpPress = String(format: "%.0f", settings.tmPress)
+        tmpBarWeight = String(format: "%.0f", settings.barWeight)
+        tmpRoundTo = String(format: "%.0f", settings.roundTo)
+        tmpTimerRegular = String(settings.timerRegularSec)
+        tmpTimerBBB = String(settings.timerBBBSec)
 
-        // Sanitize new settings
-        if fourthLiftRaw != "row" && fourthLiftRaw != "press" {
-            fourthLiftRaw = "row"
+        // Sanitize options
+        if settings.fourthLiftRaw != "row" && settings.fourthLiftRaw != "press" {
+            settings.fourthLiftRaw = "row"
         }
-        if !(3...5).contains(workoutsPerWeek) {
-            workoutsPerWeek = 4
+        if !(3...5).contains(settings.workoutsPerWeek) {
+            settings.workoutsPerWeek = 4
         }
     }
 
     private func saveAndClose() {
-        if let v = Double(tmpSquat)      { tmSquat = v }
-        if let v = Double(tmpBench)      { tmBench = v }
-        if let v = Double(tmpDeadlift)   { tmDeadlift = v }
-        if let v = Double(tmpRow)        { tmRow = v }
-        if let v = Double(tmpPress)      { tmPress = v }
-        if let v = Double(tmpBarWeight)  { barWeight = max(1, min(v, 200)) }
-        if let v = Double(tmpRoundTo)    { roundTo   = max(0.5, min(v, 100)) }
-        if let v = Int(tmpTimerRegular)  { timerRegularSec = max(1, v) }
-        if let v = Int(tmpTimerBBB)      { timerBBBsec     = max(1, v) }
+        if let v = Double(tmpSquat)      { settings.tmSquat = v }
+        if let v = Double(tmpBench)      { settings.tmBench = v }
+        if let v = Double(tmpDeadlift)   { settings.tmDeadlift = v }
+        if let v = Double(tmpRow)        { settings.tmRow = v }
+        if let v = Double(tmpPress)      { settings.tmPress = v }
+        if let v = Double(tmpBarWeight)  { settings.barWeight = max(1, min(v, 200)) }
+        if let v = Double(tmpRoundTo)    { settings.roundTo   = max(0.5, min(v, 100)) }
+        if let v = Int(tmpTimerRegular)  { settings.timerRegularSec = max(1, v) }
+        if let v = Int(tmpTimerBBB)      { settings.timerBBBSec     = max(1, v) }
         dismiss()
     }
 }
