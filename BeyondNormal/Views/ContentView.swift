@@ -82,6 +82,9 @@ struct ContentView: View {
     
     @State private var weightsVersion = 0
     
+    @StateObject private var tour = TourController()
+    @State private var tourTargets: [TourTargetID: Anchor<CGRect>] = [:]
+    
     private var isUpper: (Lift) -> Bool { { $0 == .bench || $0 == .press || $0 == .row } }
     private var isLower: (Lift) -> Bool { { $0 == .squat || $0 == .deadlift } }
     
@@ -203,179 +206,207 @@ struct ContentView: View {
     // MARK: - Body
     
     var body: some View {
-        NavigationStack {
+        GeometryReader { proxy in
             ZStack {
-                LinearGradient(
-                    colors: [Color(.systemBackground), Color(.secondarySystemBackground)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
-                
-                ScrollView { mainContent }
-            }
-            .navigationTitle("5/3/1 • Beyond Normal")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { showHistory = true } label: {
-                        Label("History", systemImage: "clock.arrow.circlepath")
+                // === YOUR EXISTING CONTENT (unchanged) ===
+                NavigationStack {
+                    ZStack {
+                        LinearGradient(
+                            colors: [Color(.systemBackground), Color(.secondarySystemBackground)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        .ignoresSafeArea()
+                        
+                        ScrollView { mainContent }
                     }
-                    .labelStyle(.iconOnly)
-                    .tint(Color.brandAccent)
-                    .accessibilityLabel("History")
-                }
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { showDataManagement = true } label: {
-                        Label("Data", systemImage: "externaldrive.fill")
-                    }
-                    .tint(Color.brandAccent)
-                    .accessibilityLabel("History")
-                    .accessibilityLabel("Data Management")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showSettings = true } label: { Image(systemName: "gearshape") }
-                        .accessibilityLabel("Settings")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showGuide = true } label: { Image(systemName: "questionmark.circle") }
-                        .accessibilityLabel("User Guide")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showPRsSheet = true } label: {
-                        Image(systemName: "trophy.fill")
-                    }
-                    .accessibilityLabel("PRs")
-                }
-            }
-            .overlay(alignment: .top) {
-                if showToast, let text = toastText {
-                    Toast(text: text)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                        .onAppear {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                                withAnimation { showToast = false }
+                    .navigationTitle("5/3/1 • Beyond Normal")
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button { showHistory = true } label: {
+                                Label("History", systemImage: "clock.arrow.circlepath")
                             }
+                            .labelStyle(.iconOnly)
+                            .tint(Color.brandAccent)
+                            .accessibilityLabel("History")
                         }
-                        .padding(.top, 8)
-                        .padding(.horizontal)
-                }
-            }
-        }
-        .tint(Color.brandAccent) // optional: global for everything inside the NavigationStack
-        .sheet(isPresented: $showSettings) {
-            SettingsSheet()
-                .environmentObject(settings)        // already injected from App root, but explicit is fine
-                .presentationDetents([.medium, .large])
-        }
-        .sheet(isPresented: $showHistory) {
-            HistorySheet(
-                availableLifts: activeLifts,
-                currentProgramWeek: currentWeek,
-                currentCycle: currentCycle
-            )
-            .presentationDetents([.medium, .large])
-        }
-        .sheet(isPresented: $showGuide) {
-            NavigationStack { UserGuideView() }
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-                .interactiveDismissDisabled(false)
-        }
-        .sheet(isPresented: $showPRsSheet) {
-            PRsSheet(currentCycle: currentCycle, lifts: activeLifts)
-                .presentationDetents([.medium, .large])
-        }
-        .sheet(isPresented: $showDataManagement) {
-            DataManagementView()
-                .presentationDetents([.medium, .large])
-        }
-        .sheet(isPresented: $showCycleSummary) {
-            CycleSummaryView(
-                fromCycle: cycleAdvancedFrom,
-                toCycle: currentCycle,
-                style: settings.progressionStyle,
-                lines: cycleSummaryLines
-            )
-            .presentationDetents([.medium, .large])
-            .preferredColorScheme(.dark)
-        }
-        .alert("Reset current lift?", isPresented: $showResetConfirm) {
-            Button("Reset", role: .destructive) { resetCurrentLift() }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("This will clear all sets (main, BBB, assistance), AMRAP reps, and workout notes for \(selectedLift.label).")
-        }
-        .alert("Saved!", isPresented: $showSavedAlert, presenting: savedAlertText) { _ in
-            Button("OK", role: .cancel) { }
-        } message: { text in
-            Text(text)
-        }
-        .safeAreaInset(edge: .bottom) {
-            if notesFocused || amrapFocused {
-                HStack {
-                    Spacer()
-                    Button {
-                        amrapFocused = false
-                        notesFocused = false
-                        UIApplication.shared.endEditing()   // <- universal keyboard dismiss
-                    } label: {
-                        Label("Done", systemImage: "keyboard.chevron.compact.down")
-                            .font(.headline)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .background(.ultraThinMaterial, in: Capsule())
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button { showDataManagement = true } label: {
+                                Label("Data", systemImage: "externaldrive.fill")
+                            }
+                            .tint(Color.brandAccent)
+                            .accessibilityLabel("Data Management")
+                        }
+                        
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button {
+                                showSettings = true
+                                // If we were highlighting the gear, advance the tour into the sheet
+                                if tour.isActive, tour.currentTarget == .settingsGear {
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) {
+                                        tour.go(to: .displayName)
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: "gearshape")
+                            }
+                            .accessibilityLabel("Settings")
+                            .tourTarget(id: .settingsGear)
+                        }
+                        
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button { showGuide = true } label: { Image(systemName: "questionmark.circle") }
+                                .accessibilityLabel("User Guide")
+                        }
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button { showPRsSheet = true } label: { Image(systemName: "trophy.fill") }
+                                .accessibilityLabel("PRs")
+                        }
                     }
-                    Spacer()
+                    .overlay(alignment: .top) {
+                        if showToast, let text = toastText {
+                            Toast(text: text)
+                                .transition(.move(edge: .top).combined(with: .opacity))
+                                .onAppear {
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                        withAnimation { showToast = false }
+                                    }
+                                }
+                                .padding(.top, 8)
+                                .padding(.horizontal)
+                        }
+                    }
                 }
-                .padding(.bottom, 6)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .zIndex(1)
-            }
-        }
-        .animation(.easeInOut, value: notesFocused || amrapFocused)
-        .onAppear {
-            let center = UNUserNotificationCenter.current()
-            center.delegate = LocalNotifDelegate.shared
-            requestNotifsIfNeeded()
-            
-            // Ensure timer is fully idle at launch & blocked
-            timer.reset()
-            timer.allowStarts = false
-            allowTimerStarts = false
-            
-            liveRepsText = repsText(for: selectedLift)
-            
-            // ✅ Ensure selectedLift is valid given the user's config
-            if !activeLifts.contains(selectedLift) {
-                selectedLift = activeLifts.first ?? .bench
-            }
-        }
-        .onChange(of: settings.workoutsPerWeek) { _, _ in
-            if !activeLifts.contains(selectedLift) {
-                selectedLift = activeLifts.first ?? .bench
-            }
-        }
-        .onChange(of: settings.fourthLiftRaw) { _, _ in
-            if !activeLifts.contains(selectedLift) {
-                selectedLift = activeLifts.first ?? .bench
-            }
-        }
-        .onChange(of: selectedLift) { _, new in
-            liveRepsText = repsText(for: new)
-        }
-        .onChange(of: liveRepsText) { _, _ in
-            saveReps(liveRepsText, for: selectedLift)
-        }
-        .onChange(of: settings.tmSquat) { _, _ in weightsVersion += 1 }
-        .onChange(of: settings.tmBench) { _, _ in weightsVersion += 1 }
-        .onChange(of: settings.tmDeadlift) { _, _ in weightsVersion += 1 }
-        .onChange(of: settings.tmRow) { _, _ in weightsVersion += 1 }
-        .onChange(of: settings.tmPress) { _, _ in weightsVersion += 1 }
+                .tint(Color.brandAccent)
+                .sheet(isPresented: $showSettings) {
+                    SettingsSheet()
+                        .environmentObject(settings)
+                        .environmentObject(tour)  
+                        .presentationDetents([.medium, .large])
+                }
+                .sheet(isPresented: $showHistory) {
+                    HistorySheet(
+                        availableLifts: activeLifts,
+                        currentProgramWeek: currentWeek,
+                        currentCycle: currentCycle
+                    )
+                    .presentationDetents([.medium, .large])
+                }
+                .sheet(isPresented: $showGuide) {
+                    NavigationStack { UserGuideView() }
+                        .presentationDetents([.large])
+                        .presentationDragIndicator(.visible)
+                        .interactiveDismissDisabled(false)
+                }
+                .sheet(isPresented: $showPRsSheet) {
+                    PRsSheet(currentCycle: currentCycle, lifts: activeLifts)
+                        .presentationDetents([.medium, .large])
+                }
+                .sheet(isPresented: $showDataManagement) {
+                    DataManagementView()
+                        .presentationDetents([.medium, .large])
+                }
+                .sheet(isPresented: $showCycleSummary) {
+                    CycleSummaryView(
+                        fromCycle: cycleAdvancedFrom,
+                        toCycle: currentCycle,
+                        style: settings.progressionStyle,
+                        lines: cycleSummaryLines
+                    )
+                    .presentationDetents([.medium, .large])
+                    .preferredColorScheme(.dark)
+                }
+                .alert("Reset current lift?", isPresented: $showResetConfirm) {
+                    Button("Reset", role: .destructive) { resetCurrentLift() }
+                    Button("Cancel", role: .cancel) { }
+                } message: {
+                    Text("This will clear all sets (main, BBB, assistance), AMRAP reps, and workout notes for \(selectedLift.label).")
+                }
+                .alert("Saved!", isPresented: $showSavedAlert, presenting: savedAlertText) { _ in
+                    Button("OK", role: .cancel) { }
+                } message: { text in
+                    Text(text)
+                }
+                .safeAreaInset(edge: .bottom) {
+                    if notesFocused || amrapFocused {
+                        HStack {
+                            Spacer()
+                            Button {
+                                amrapFocused = false
+                                notesFocused = false
+                                UIApplication.shared.endEditing()
+                            } label: {
+                                Label("Done", systemImage: "keyboard.chevron.compact.down")
+                                    .font(.headline)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                    .background(.ultraThinMaterial, in: Capsule())
+                            }
+                            Spacer()
+                        }
+                        .padding(.bottom, 6)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .zIndex(1)
+                    }
+                }
+                .animation(.easeInOut, value: notesFocused || amrapFocused)
+                .onAppear {
+                    let center = UNUserNotificationCenter.current()
+                    center.delegate = LocalNotifDelegate.shared
+                    requestNotifsIfNeeded()
+                    
+                    timer.reset()
+                    timer.allowStarts = false
+                    allowTimerStarts = false
+                    
+                    liveRepsText = repsText(for: selectedLift)
+                    if !activeLifts.contains(selectedLift) {
+                        selectedLift = activeLifts.first ?? .bench
+                    }
+                }
+                .onChange(of: settings.workoutsPerWeek) { _, _ in
+                    if !activeLifts.contains(selectedLift) {
+                        selectedLift = activeLifts.first ?? .bench
+                    }
+                }
+                .onChange(of: settings.fourthLiftRaw) { _, _ in
+                    if !activeLifts.contains(selectedLift) {
+                        selectedLift = activeLifts.first ?? .bench
+                    }
+                }
+                .onChange(of: selectedLift) { _, new in
+                    liveRepsText = repsText(for: new)
+                }
+                .onChange(of: liveRepsText) { _, _ in
+                    saveReps(liveRepsText, for: selectedLift)
+                }
+                .onChange(of: settings.tmSquat) { _, _ in weightsVersion += 1 }
+                .onChange(of: settings.tmBench) { _, _ in weightsVersion += 1 }
+                .onChange(of: settings.tmDeadlift) { _, _ in weightsVersion += 1 }
+                .onChange(of: settings.tmRow) { _, _ in weightsVersion += 1 }
+                .onChange(of: settings.tmPress) { _, _ in weightsVersion += 1 }
+                .onChange(of: settings.roundTo) { _, _ in weightsVersion += 1 }
+                .onChange(of: settings.bbbPercent) { _, _ in weightsVersion += 1 }
+                .onReceive(implements.objectWillChange) { _ in weightsVersion &+= 1 }
+                // === collect tour target anchors from inside the NavigationStack ===
+                .overlayPreferenceValue(TourTargetsPreferenceKey.self) { value in
+                    Color.clear
+                        .onAppear { tourTargets = value }
+                        .onChange(of: value) { _, newValue in tourTargets = newValue }
+                }
 
-        .onChange(of: settings.roundTo) { _, _ in weightsVersion += 1 }
-        .onChange(of: settings.bbbPercent) { _, _ in weightsVersion += 1 }
-        
-        .onReceive(implements.objectWillChange) { _ in weightsVersion &+= 1 }
+                // === TOUR OVERLAY (only when active) ===
+                if tour.isActive {
+                    GearTourOverlay(targets: tourTargets, proxy: proxy)
+                        .environmentObject(tour)
+                }
+            }
+            .onAppear {
+                tour.startHighlightingGearIfFirstRun()
+            }
+        }
+        // Optional: make tour available further down if needed later
+        .environmentObject(tour)
     }
     
     // MARK: - Main scroll content (split out)
