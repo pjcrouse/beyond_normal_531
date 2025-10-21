@@ -1,11 +1,13 @@
+import Foundation
 import SwiftUI
 
 @MainActor
 final class ProgramSettings: ObservableObject {
 
-    // Namespaced keys (stable, human-readable)
+    // MARK: - Keys (namespaced + stable)
     private struct Key {
         static let userDisplayName   = "bn.user_display_name"
+        static let authorID          = "bn.author_id"          // ← add a namespaced key
 
         static let tmSquat           = "bn.tm.squat"
         static let tmBench           = "bn.tm.bench"
@@ -16,17 +18,17 @@ final class ProgramSettings: ObservableObject {
         static let barWeight         = "bn.bar_weight"
         static let roundTo           = "bn.round_to"
 
-        static let bbbPercent        = "bn.bbb_percent"       // store as Double 0.40...0.70
+        static let bbbPercent        = "bn.bbb_percent"
 
         static let timerRegularSec   = "bn.timer.regular"
         static let timerBBBSec       = "bn.timer.bbb"
 
-        static let oneRMFormula      = "one_rm_formula"       // existing app key
-        static let progressionStyle  = "tm_progression_style" // existing app key
-        static let autoTMPercent     = "bn.auto_tm_percent"   // 80...95
+        static let oneRMFormula      = "one_rm_formula"
+        static let progressionStyle  = "tm_progression_style"
+        static let autoTMPercent     = "bn.auto_tm_percent"
 
-        static let workoutsPerWeek   = "bn.workouts_per_week" // 3/4/5
-        static let fourthLiftRaw     = "bn.fourth_lift"       // "row" | "press"
+        static let workoutsPerWeek   = "bn.workouts_per_week"
+        static let fourthLiftRaw     = "bn.fourth_lift"
 
         static let assistSquatID     = "bn.assist.squat"
         static let assistBenchID     = "bn.assist.bench"
@@ -35,11 +37,12 @@ final class ProgramSettings: ObservableObject {
         static let assistPressID     = "bn.assist.press"
 
         static let autoAdvanceWeek   = "bn.auto_advance_week"
-        static let currentCycle      = "current_cycle"        // you were already using this
+        static let currentCycle      = "current_cycle"
     }
 
-    // Raw persisted storage
+    // MARK: - Raw persisted storage (@AppStorage mirrors)
     @AppStorage(Key.userDisplayName)   private var userDisplayNameRaw: String = ""
+    @AppStorage(Key.authorID)          private var authorIDRaw: String = ""   // ← use namespaced key
 
     @AppStorage(Key.tmSquat)           private var tmSquatRaw: Double = 315
     @AppStorage(Key.tmBench)           private var tmBenchRaw: Double = 225
@@ -71,7 +74,7 @@ final class ProgramSettings: ObservableObject {
     @AppStorage(Key.autoAdvanceWeek)   private var autoAdvanceWeekRaw: Bool = true
     @AppStorage(Key.currentCycle)      private var currentCycleRaw: Int = 1
 
-    // App-facing state (Published so views can bind; give defaults here)
+    // MARK: - App-facing (Published)
     @Published var userDisplayName: String = ""
 
     @Published var tmSquat: Double = 315
@@ -104,8 +107,8 @@ final class ProgramSettings: ObservableObject {
     @Published var autoAdvanceWeek: Bool = true
     @Published var currentCycle: Int = 1
 
+    // MARK: - Init (seed Published from UserDefaults)
     init() {
-        // Seed Published from UserDefaults without touching the @AppStorage wrappers
         let d = UserDefaults.standard
 
         userDisplayName   = d.string(forKey: Key.userDisplayName) ?? ""
@@ -143,13 +146,14 @@ final class ProgramSettings: ObservableObject {
 
         autoAdvanceWeek   = d.object(forKey: Key.autoAdvanceWeek) as? Bool ?? true
         currentCycle      = d.object(forKey: Key.currentCycle)    as? Int ?? 1
+
+        // Ensure a stable author UUID exists from first launch.
+        if authorIDRaw.isEmpty {
+            authorIDRaw = UUID().uuidString
+        }
     }
 
-    // Keep raw storage in sync whenever Published changes.
-    // (didSet on each property is simplest/robust; place right after each Published var if you prefer.)
-    // To keep this file readable, do it here explicitly:
-
-    // Sync helpers
+    // MARK: - Persist back to @AppStorage
     private func sync() {
         userDisplayNameRaw   = userDisplayName
 
@@ -182,10 +186,22 @@ final class ProgramSettings: ObservableObject {
 
         autoAdvanceWeekRaw   = autoAdvanceWeek
         currentCycleRaw      = currentCycle
+        // authorIDRaw is managed once in init; no need to update unless you add UI to rotate it.
     }
 
-    // Observe changes and sync (SwiftUI will call objectWillChange; we just mirror to UserDefaults)
-    // You can prefer didSet on each Published property; or keep one onChange in the main settings view.
-    // Minimal: expose a method for SettingsSheet to call after edits:
+    /// Call this from SettingsSheet "Save" (you already do)
     func save() { sync() }
+
+    // MARK: - Export helpers for attribution
+    var authorID: UUID {
+        if let u = UUID(uuidString: authorIDRaw) { return u }
+        let fresh = UUID()
+        authorIDRaw = fresh.uuidString
+        return fresh
+    }
+
+    var displayAuthorName: String {
+        let n = userDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return n.isEmpty ? "Anonymous" : n
+    }
 }

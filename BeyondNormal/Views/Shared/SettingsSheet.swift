@@ -214,21 +214,24 @@ struct SettingsSheet: View {
                 ExercisePickerView(
                     title: "Choose Squat Assistance",
                     selectedID: $settings.assistSquatID,
-                    allowedCategories: [.legs]
+                    allowedCategories: [.legs],
+                    lift: .squat
                 )
             }
             NavigationLink("Bench Day") {
                 ExercisePickerView(
                     title: "Choose Bench Assistance",
                     selectedID: $settings.assistBenchID,
-                    allowedCategories: [.push]
+                    allowedCategories: [.push],
+                    lift: .bench
                 )
             }
             NavigationLink("Deadlift Day") {
                 ExercisePickerView(
                     title: "Choose Deadlift Assistance",
                     selectedID: $settings.assistDeadliftID,
-                    allowedCategories: [.legs, .core]
+                    allowedCategories: [.legs, .core],
+                    lift: .deadlift
                 )
             }
 
@@ -261,7 +264,8 @@ struct SettingsSheet: View {
             ExercisePickerView(
                 title: "Choose Row Assistance",
                 selectedID: $settings.assistRowID,
-                allowedCategories: [.pull]
+                allowedCategories: [.pull],
+                lift: .row
             )
         }
     }
@@ -271,7 +275,8 @@ struct SettingsSheet: View {
             ExercisePickerView(
                 title: "Choose Press Assistance",
                 selectedID: $settings.assistPressID,
-                allowedCategories: [.push]
+                allowedCategories: [.push],
+                lift: .press
             )
         }
     }
