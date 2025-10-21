@@ -1,5 +1,7 @@
 import SwiftUI
 import Foundation
+import UniformTypeIdentifiers
+import UIKit
 
 struct ExercisePickerView: View {
     // MARK: Inputs
@@ -18,6 +20,9 @@ struct ExercisePickerView: View {
     // Export state
     @State private var shareURL: URL?              // file to hand to ShareSheet(context:)
 
+    @State private var showImporter = false
+    @State private var importResultText: String?
+    
     // MARK: Derived data
 
     /// All exercises (built-in + user) that match allowed categories
@@ -113,7 +118,9 @@ struct ExercisePickerView: View {
                     }
                     do {
                         let liftKey = lift.label.lowercased()
-                        let url = try AssistanceExporter.exportPackageJSON(dtos, liftKey: liftKey)
+                        let url = try AssistanceExporter.exportPackageJSON(dtos,
+                                                                           liftKey: lift.label.lowercased(),
+                                                                           creatorName: settings.displayAuthorName)
                         shareURL = url
                     } catch {
                         #if DEBUG
@@ -125,6 +132,13 @@ struct ExercisePickerView: View {
                 }
                 .disabled(custom.isEmpty)
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showImporter = true
+                } label: {
+                    Label("Import", systemImage: "square.and.arrow.down")
+                }
+            }
         }
         // Add-new sheet
         .sheet(isPresented: $showAddSheet) {
@@ -133,6 +147,68 @@ struct ExercisePickerView: View {
                 preselectedCategory: presetCategory()
             )
             .presentationDetents([.medium, .large])
+        }
+        // Import picker (.json)
+        .sheet(isPresented: $showImporter) {
+            JSONImportPicker { urls in
+                guard let url = urls.first else { return }
+                var data: Data?
+                let needsAccess = url.startAccessingSecurityScopedResource()
+                defer { if needsAccess { url.stopAccessingSecurityScopedResource() } }
+                do {
+                    data = try Data(contentsOf: url)
+                } catch {
+                    importResultText = "Failed to read file."
+                    return
+                }
+                guard let data else { return }
+                // Validate category must match this picker's lift
+                let liftKey = lift.label.lowercased()
+                let result = AssistanceImporter.`import`(data: data, mode: .requireCategoryMatch(liftKey: liftKey)) { dto in
+                    // Persist via your AssistanceLibrary; map DTO → your app model
+                    let equip = dto.equipment.lowercased()
+                    let kind: EquipmentKind = {
+                        switch equip {
+                        case "bodyweight": return .bodyweight
+                        case "dumbbell":   return .dumbbells
+                        case "barbell":    return .barbell
+                        case "machine":    return .machine
+                        case "cable":      return .cable
+                        default:           return .other
+                        }
+                    }()
+
+                    let barOverride = (kind == .barbell) ? (dto.barWeight ?? 45) : nil
+
+                    assistanceLibrary.add(
+                        name: dto.exerciseName,
+                        defaultWeight: dto.defaultWeight,
+                        defaultReps: dto.defaultReps,
+                        allowWeightToggle: false,
+                        toggledWeight: 0,
+                        usesImpliedImplements: dto.defaultWeight == 0,
+                        category: lift.categoryFromLift,        // small helper below
+                        areas: [],
+                        tags: [],
+                        authorDisplayName: dto.creatorName,
+                        equipment: kind,
+                        barWeightOverride: barOverride
+                    )
+                }
+
+                importResultText = """
+                Imported: \(result.importedCount)
+                Skipped (wrong category): \(result.skippedWrongCategory)
+                Failed decode: \(result.failedDecode)
+                \(result.errors.isEmpty ? "" : "\nIssues:\n- " + result.errors.joined(separator: "\n- "))
+                """
+            }
+        }
+        .alert("Import Result", isPresented: Binding(get: { importResultText != nil },
+                                                     set: { if !$0 { importResultText = nil } })) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(importResultText ?? "")
         }
         // Single-file share via your global ShareSheet(context:)
         .sheet(item: Binding(
@@ -210,5 +286,40 @@ struct ExercisePickerView: View {
     private struct IdentifiedURL: Identifiable {
         let url: URL
         var id: URL { url }
+    }
+
+    private struct JSONImportPicker: UIViewControllerRepresentable {
+        let onPick: ([URL]) -> Void
+
+        func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+            let picker = UIDocumentPickerViewController(forOpeningContentTypes: [UTType.json])
+            picker.allowsMultipleSelection = false
+            picker.delegate = context.coordinator
+            return picker
+        }
+
+        func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+
+        func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick) }
+
+        final class Coordinator: NSObject, UIDocumentPickerDelegate {
+            let onPick: ([URL]) -> Void
+            init(onPick: @escaping ([URL]) -> Void) { self.onPick = onPick }
+
+            func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+                onPick(urls)
+            }
+            func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { }
+        }
+    }
+}
+
+private extension Lift {
+    var categoryFromLift: ExerciseCategory {
+        switch self {
+        case .squat, .deadlift: return .legs
+        case .bench, .press:    return .push
+        case .row:              return .pull
+        }
     }
 }
