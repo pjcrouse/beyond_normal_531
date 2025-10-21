@@ -231,6 +231,29 @@ struct ExercisePickerView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+
+            // visible overflow button only for custom exercises
+            if userIDs.contains(ex.id) {
+                Menu {
+                    Button {
+                        exportSingle(ex)
+                    } label: {
+                        Label("Export JSON", systemImage: "square.and.arrow.up")
+                    }
+
+                    Button(role: .destructive) {
+                        assistanceLibrary.remove(id: ex.id)
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .imageScale(.medium)
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 4)
+                }
+            }
+
             if selectedID == ex.id {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.tint)
