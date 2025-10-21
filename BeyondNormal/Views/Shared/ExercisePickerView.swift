@@ -337,7 +337,7 @@ struct ExercisePickerView: View {
     }
 }
 
-private extension Lift {
+extension Lift {
     var categoryFromLift: ExerciseCategory {
         switch self {
         case .squat, .deadlift: return .legs
@@ -345,4 +345,18 @@ private extension Lift {
         case .row:              return .pull
         }
     }
+    
+    /// Allowed categories for the assistance picker
+        var categoriesForPicker: [ExerciseCategory] {
+            let base: [ExerciseCategory]
+            switch self {
+            case .squat:   base = [.legs]
+            case .deadlift:base = [.legs, .pull]
+            case .bench,
+                 .press:   base = [.push]
+            case .row:     base = [.pull]
+            }
+            // ✅ Add core globally for all lifts
+            return Array(Set(base + [.core]))
+        }
 }

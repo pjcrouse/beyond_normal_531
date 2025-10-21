@@ -230,7 +230,7 @@ struct SettingsSheet: View {
                 ExercisePickerView(
                     title: "Choose Deadlift Assistance",
                     selectedID: $settings.assistDeadliftID,
-                    allowedCategories: [.legs, .core],
+                    allowedCategories: Lift.deadlift.categoriesForPicker,
                     lift: .deadlift
                 )
             }

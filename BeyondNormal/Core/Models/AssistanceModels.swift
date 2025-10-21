@@ -110,81 +110,100 @@ struct AssistanceExercise: Identifiable, Codable, Hashable {
 
 extension AssistanceExercise {
     static let catalog: [AssistanceExercise] = [
-        // LEGS (squat/deadlift leg drive)
+        // -------------------------
+        // SQUAT (2–3)
+        // -------------------------
         .init(id: "split_squat", name: "Heels-Elevated Split Squat",
               defaultWeight: 0, defaultReps: 12,
               allowWeightToggle: true, toggledWeight: 30,
-              usesImpliedImplements: false, category: .legs),
+              usesImpliedImplements: false, category: .legs,
+              equipment: .dumbbells),
         .init(id: "front_squat", name: "Front Squat",
               defaultWeight: 95, defaultReps: 8,
               allowWeightToggle: false, toggledWeight: 0,
-              usesImpliedImplements: false, category: .legs),
+              usesImpliedImplements: false, category: .legs,
+              equipment: .barbell),
         .init(id: "paused_squat", name: "Paused Squat (2s)",
               defaultWeight: 95, defaultReps: 5,
               allowWeightToggle: false, toggledWeight: 0,
-              usesImpliedImplements: false, category: .legs),
-        .init(id: "leg_press", name: "Leg Press",
-              defaultWeight: 180, defaultReps: 12,
-              allowWeightToggle: false, toggledWeight: 0,
-              usesImpliedImplements: true, category: .legs),
-        .init(id: "bulgarian", name: "Bulgarian Split Squat",
-              defaultWeight: 0, defaultReps: 10,
-              allowWeightToggle: true, toggledWeight: 30,
-              usesImpliedImplements: false, category: .legs),
-        .init(id: "lunges", name: "Walking Lunges",
-              defaultWeight: 0, defaultReps: 12,
-              allowWeightToggle: true, toggledWeight: 25,
-              usesImpliedImplements: false, category: .legs),
+              usesImpliedImplements: false, category: .legs,
+              equipment: .barbell),
 
-        // PUSH (bench)
-        .init(id: "triceps_ext", name: "Lying Triceps Extension (EZ)",
-              defaultWeight: 25, defaultReps: 12,
-              allowWeightToggle: false, toggledWeight: 0,
-              usesImpliedImplements: true, category: .push),
-        .init(id: "dips", name: "Dips",
-              defaultWeight: 0, defaultReps: 10,
-              allowWeightToggle: true, toggledWeight: 25,
-              usesImpliedImplements: false, category: .push),
+        // -------------------------
+        // BENCH (2–3)
+        // -------------------------
         .init(id: "close_grip", name: "Close-Grip Bench",
               defaultWeight: 95, defaultReps: 8,
               allowWeightToggle: false, toggledWeight: 0,
-              usesImpliedImplements: false, category: .push),
+              usesImpliedImplements: false, category: .push,
+              equipment: .barbell),
+        .init(id: "db_bench", name: "Dumbbell Bench Press",
+              defaultWeight: 40, defaultReps: 10,
+              allowWeightToggle: false, toggledWeight: 0,
+              usesImpliedImplements: false, category: .push,
+              equipment: .dumbbells),
+        .init(id: "dips", name: "Dips",
+              defaultWeight: 0, defaultReps: 10,
+              allowWeightToggle: true, toggledWeight: 25,
+              usesImpliedImplements: false, category: .push,
+              equipment: .bodyweight),
 
-        // PULL (row)
+        // -------------------------
+        // ROW (2–3)
+        // -------------------------
+        .init(id: "lat_pulldown", name: "Lat Pulldown",
+              defaultWeight: 70, defaultReps: 10,
+              allowWeightToggle: false, toggledWeight: 0,
+              usesImpliedImplements: false, category: .pull,
+              equipment: .cable),
         .init(id: "spider_curls", name: "Spider Curls (DB)",
               defaultWeight: 30, defaultReps: 12,
               allowWeightToggle: false, toggledWeight: 0,
               usesImpliedImplements: false, category: .pull),
-        .init(id: "hammer_curls", name: "Hammer Curls (DB)",
-              defaultWeight: 30, defaultReps: 12,
-              allowWeightToggle: false, toggledWeight: 0,
-              usesImpliedImplements: false, category: .pull),
-        .init(id: "face_pulls", name: "Face Pulls (Cable)",
-              defaultWeight: 25, defaultReps: 15,
-              allowWeightToggle: false, toggledWeight: 0,
-              usesImpliedImplements: true, category: .pull),
-
-        // CORE (deadlift/back)
-        .init(id: "back_ext", name: "Back Extension",
-              defaultWeight: 0, defaultReps: 12,
+        .init(id: "pullups", name: "Pull-Ups / Chin-Ups",
+              defaultWeight: 0, defaultReps: 6,
               allowWeightToggle: true, toggledWeight: 25,
-              usesImpliedImplements: false, category: .core),
-        .init(id: "hanging_leg", name: "Hanging Leg Raise",
-              defaultWeight: 0, defaultReps: 10,
+              usesImpliedImplements: false, category: .pull,
+              equipment: .bodyweight),
+        
+        
+        // -------------------------
+        // OVERHEAD PRESS (2–3)
+        // -------------------------
+        .init(id: "seated_db_press", name: "Seated Dumbbell Press",
+              defaultWeight: 35, defaultReps: 10,
               allowWeightToggle: false, toggledWeight: 0,
-              usesImpliedImplements: false, category: .core),
-        .init(id: "ab_wheel", name: "Ab Wheel Rollout",
-              defaultWeight: 0, defaultReps: 8,
+              usesImpliedImplements: false, category: .push,
+              equipment: .dumbbells),
+        .init(id: "push_press", name: "Push Press",
+              defaultWeight: 95, defaultReps: 5,
               allowWeightToggle: false, toggledWeight: 0,
-              usesImpliedImplements: false, category: .core),
-        .init(id: "db_rdl", name: "RDL (DB)",
-              defaultWeight: 30, defaultReps: 10,
+              usesImpliedImplements: false, category: .push,
+              equipment: .barbell),
+        .init(id: "lateral_raise", name: "Lateral Raise",
+              defaultWeight: 15, defaultReps: 12,
               allowWeightToggle: false, toggledWeight: 0,
-              usesImpliedImplements: false, category: .core),
-        .init(id: "ssb_gm", name: "SSB Good Morning",
+              usesImpliedImplements: false, category: .push,
+              equipment: .dumbbells),
+
+        // -------------------------
+        // DEADLIFT (2–3)
+        // -------------------------
+        .init(id: "barbell_rdl", name: "Romanian Deadlift (Barbell)",
               defaultWeight: 95, defaultReps: 8,
               allowWeightToggle: false, toggledWeight: 0,
-              usesImpliedImplements: false, category: .core)
+              usesImpliedImplements: false, category: .pull,
+              equipment: .barbell),
+        .init(id: "deficit_dl", name: "Deficit Deadlift",
+              defaultWeight: 95, defaultReps: 5,
+              allowWeightToggle: false, toggledWeight: 0,
+              usesImpliedImplements: false, category: .pull,
+              equipment: .barbell),
+        .init(id: "barbell_row", name: "Barbell Row",
+              defaultWeight: 95, defaultReps: 8,
+              allowWeightToggle: false, toggledWeight: 0,
+              usesImpliedImplements: false, category: .pull,
+              equipment: .barbell),
     ]
 
     static func byID(_ id: String) -> AssistanceExercise? {
