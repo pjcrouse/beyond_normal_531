@@ -33,6 +33,7 @@ struct AssistanceExercise: Identifiable, Codable, Hashable {
     var source: AssistanceSource = .builtIn  // built-in unless user creates/imports
     var createdAt: Date = Date()
     var version: Int = 1
+    var authorDisplayName: String? = nil
     
     // NEW
     var equipment: EquipmentKind = .bodyweight
@@ -97,6 +98,7 @@ struct AssistanceExercise: Identifiable, Codable, Hashable {
         self.version = 1
         self.equipment = equipment
         self.barWeightOverride = barWeightOverride
+        self.authorDisplayName = authorDisplayName 
     }
     
     var isBarbell: Bool { equipment == .barbell }

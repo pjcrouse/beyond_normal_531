@@ -29,13 +29,6 @@ struct ContentView: View {
     
     @AppStorage("current_week")      private var currentWeek: Int = 1
     
-    // Selected assistance by main lift
-    @AppStorage("assist_squat_id")    private var assistSquatID: String = "split_squat"
-    @AppStorage("assist_bench_id")    private var assistBenchID: String = "triceps_ext"
-    @AppStorage("assist_deadlift_id") private var assistDeadliftID: String = "back_ext"
-    @AppStorage("assist_row_id")      private var assistRowID: String = "spider_curls"
-    @AppStorage("assist_press_id") private var assistPressID: String = "triceps_ext" // safe default
-    
     // Configurable workouts per week support (now sourced from ProgramSettings)
     private var workoutsPerWeek: Int { settings.workoutsPerWeek }   // 3, 4, or 5
     private var fourthLift: Lift {
@@ -246,14 +239,6 @@ struct ContentView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showGuide = true } label: { Image(systemName: "questionmark.circle") }
                         .accessibilityLabel("User Guide")
-                }
-                // Keyboard toolbar - Done button
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Done") {
-                        amrapFocused = false
-                        notesFocused = false
-                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showPRsSheet = true } label: {
@@ -581,15 +566,17 @@ struct ContentView: View {
     // MARK: - Helpers
     
     private func assistanceExerciseFor(_ lift: Lift) -> AssistanceExercise {
-        let id: String
-        switch lift {
-        case .squat:    id = assistSquatID
-        case .bench:    id = assistBenchID
-        case .deadlift: id = assistDeadliftID
-        case .row:      id = assistRowID
-        case .press:    id = assistPressID
-        }
-        
+        // Read the ID from ProgramSettings (single source of truth)
+        let id: String = {
+            switch lift {
+            case .squat:    return settings.assistSquatID
+            case .bench:    return settings.assistBenchID
+            case .deadlift: return settings.assistDeadliftID
+            case .row:      return settings.assistRowID
+            case .press:    return settings.assistPressID
+            }
+        }()
+
         // 1) Try user-created first
         if let fromUser = assistanceLibrary.userCreated.first(where: { $0.id == id }) {
             return fromUser
@@ -598,7 +585,7 @@ struct ContentView: View {
         if let fromBuiltIn = AssistanceExercise.byID(id) {
             return fromBuiltIn
         }
-        // 3) Absolute fallback: the first catalog item (should never happen in practice)
+        // 3) Fallback
         return AssistanceExercise.catalog.first!
     }
     

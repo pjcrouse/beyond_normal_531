@@ -5,6 +5,7 @@ enum ShareContentType {
     case award(Award)
     case summary(String)
     case weeklySummary(ProgramWeekSummaryResult)
+    case fileURL(URL) 
 }
 
 // MARK: - Share Request
