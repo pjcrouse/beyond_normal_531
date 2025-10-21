@@ -1,6 +1,8 @@
+// Core/Helpers/ShareSheet.swift
 import SwiftUI
 import UIKit
 import LinkPresentation
+import Foundation   // needed for .whitespacesAndNewlines and number formatting
 
 // ---- Messages-safe text payload (uses NSString) ----
 final class BNSharePayload: NSObject, UIActivityItemSource {
@@ -27,8 +29,9 @@ struct ShareSheet: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIActivityViewController {
         var finalText = ""
         var image: UIImage? = nil
+        var items: [Any] = []  // set in switch; fallback to text payload if still empty
 
-        // Brand wrapper used by ALL cases
+        // Brand wrapper used by ALL text-based cases
         func branded(title: String, body: String) -> String {
             """
             🔥 Beyond Normal — \(title)
@@ -42,9 +45,14 @@ struct ShareSheet: UIViewControllerRepresentable {
 
         if let ctx = self.context {
             switch ctx {
+            case .fileURL(let url):            // ✅ NEW: direct file share
+                items = [url]
+
             case .summary(let summaryBody):
-                finalText = branded(title: "Workout Summary",
-                                    body: summaryBody.trimmingCharacters(in: .whitespacesAndNewlines))
+                finalText = branded(
+                    title: "Workout Summary",
+                    body: summaryBody.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
 
             case .weeklySummary(let result):
                 let total = result.totalVolume.formatted(.number)
@@ -72,9 +80,11 @@ struct ShareSheet: UIViewControllerRepresentable {
             }
         }
 
-        // Always use BNSharePayload so iMessage gets NSString (prevents blank body)
-        var items: [Any] = [BNSharePayload(text: finalText)]
-        if let img = image { items.insert(img, at: 0) }
+        // If not a file share, build the standard text payload (NSString for iMessage reliability).
+        if items.isEmpty {
+            items = [BNSharePayload(text: finalText)]
+            if let img = image { items.insert(img, at: 0) }
+        }
 
         let vc = UIActivityViewController(activityItems: items, applicationActivities: nil)
         vc.excludedActivityTypes = [.assignToContact, .addToReadingList, .print]

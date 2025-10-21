@@ -45,7 +45,7 @@ final class AssistanceLibrary: ObservableObject {
              category: ExerciseCategory,
              areas: Set<FocusArea>,
              tags: Set<AssistanceTag>,
-             authorDisplayName: String?,
+             authorDisplayName: String? = nil,
              equipment: EquipmentKind = .bodyweight,
              barWeightOverride: Double? = nil) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
