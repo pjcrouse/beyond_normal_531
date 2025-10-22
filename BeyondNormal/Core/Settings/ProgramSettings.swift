@@ -139,10 +139,10 @@ final class ProgramSettings: ObservableObject {
         fourthLiftRaw     = d.string(forKey: Key.fourthLiftRaw) ?? "row"
 
         assistSquatID     = d.string(forKey: Key.assistSquatID) ?? "split_squat"
-        assistBenchID     = d.string(forKey: Key.assistBenchID) ?? "triceps_ext"
-        assistDeadliftID  = d.string(forKey: Key.assistDeadliftID) ?? "back_ext"
+        assistBenchID     = d.string(forKey: Key.assistBenchID) ?? "close_grip"
+        assistDeadliftID  = d.string(forKey: Key.assistDeadliftID) ?? "barbell_rdl"
         assistRowID       = d.string(forKey: Key.assistRowID) ?? "spider_curls"
-        assistPressID     = d.string(forKey: Key.assistPressID) ?? "triceps_ext"
+        assistPressID     = d.string(forKey: Key.assistPressID) ?? "seated_db_press"
 
         autoAdvanceWeek   = d.object(forKey: Key.autoAdvanceWeek) as? Bool ?? true
         currentCycle      = d.object(forKey: Key.currentCycle)    as? Int ?? 1
