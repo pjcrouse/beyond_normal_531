@@ -394,6 +394,9 @@ struct ContentView: View {
                         withAnimation { showSettings = false }   // dismiss the Settings sheet
                     }
                 }
+                .onChange(of: currentWeek) { _, _ in
+                    liveRepsText = repsText(for: selectedLift)
+                }
                 .onReceive(implements.objectWillChange) { _ in weightsVersion &+= 1 }
                 // === collect tour target anchors from inside the NavigationStack ===
                 .overlayPreferenceValue(TourTargetsPreferenceKey.self) { value in

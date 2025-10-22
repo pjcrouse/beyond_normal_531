@@ -116,6 +116,7 @@ public struct AMRAPRow: View {
                     .submitLabel(.done)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
+                    .id("amrap-\(liftLabel)-\(refreshID)")
                     .onSubmit { focus.wrappedValue = false }
                     .onChange(of: reps) { _, s in
                         DispatchQueue.main.async {
