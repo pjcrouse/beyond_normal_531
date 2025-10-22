@@ -257,6 +257,7 @@ struct ContentView: View {
                         ToolbarItem(placement: .topBarTrailing) {
                             Button { showGuide = true } label: { Image(systemName: "questionmark.circle") }
                                 .accessibilityLabel("User Guide")
+                                .tourTarget(id: .helpIcon)
                         }
                         ToolbarItem(placement: .topBarTrailing) {
                             Button { showPRsSheet = true } label: { Image(systemName: "trophy.fill") }
@@ -387,6 +388,12 @@ struct ContentView: View {
                 .onChange(of: settings.tmPress) { _, _ in weightsVersion += 1 }
                 .onChange(of: settings.roundTo) { _, _ in weightsVersion += 1 }
                 .onChange(of: settings.bbbPercent) { _, _ in weightsVersion += 1 }
+                // Dismiss settings and dim all but user guide icon
+                .onChange(of: tour.currentTarget) { _, newTarget in
+                    if newTarget == .helpIcon {
+                        withAnimation { showSettings = false }   // dismiss the Settings sheet
+                    }
+                }
                 .onReceive(implements.objectWillChange) { _ in weightsVersion &+= 1 }
                 // === collect tour target anchors from inside the NavigationStack ===
                 .overlayPreferenceValue(TourTargetsPreferenceKey.self) { value in

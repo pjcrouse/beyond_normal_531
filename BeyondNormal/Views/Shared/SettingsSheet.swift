@@ -483,22 +483,23 @@ struct SettingsSheet: View {
         let wasTM = isTMField(focusedField)
         focusedField = nil
         UIApplication.shared.endEditing()
-        
+
         switch tour.currentTarget {
         case .displayName:
+            // After name entry, show the Training Maxes section
             tour.go(to: .trainingMaxes)
-            
+
         case .trainingMaxes:
             if wasTM {
                 tmAdvanceArmed = true
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                     if self.tmAdvanceArmed && self.focusedField == nil {
-                        // TODO: Implement .assistance tour target, then use: tour.go(to: .assistance)
-                        // For now, just stay on trainingMaxes or complete the tour
+                        // Not really entering TMs now, just moving on to help icon
+                        tour.go(to: .helpIcon)
                     }
                 }
             }
-            
+
         default:
             break
         }

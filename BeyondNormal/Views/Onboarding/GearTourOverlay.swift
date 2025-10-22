@@ -11,6 +11,8 @@ struct GearTourOverlay: View {
     private let pad: CGFloat = 8
 
     var body: some View {
+        let dimAmount: Double = (tour.currentTarget == .helpIcon) ? 0.92 : 0.80
+        
         // Show only when active and we have an anchor for the current target
         guard tour.isActive,
               let target = tour.currentTarget,
@@ -22,7 +24,8 @@ struct GearTourOverlay: View {
 
         return AnyView(
             ZStack {
-                Color.black.opacity(0.8)
+                // Dim everything except the highlighted hole
+                Color.black.opacity(dimAmount)
                     .ignoresSafeArea()
                     .mask(
                         Canvas { ctx, size in
@@ -32,15 +35,32 @@ struct GearTourOverlay: View {
                             ctx.fill(path, with: .color(.black), style: FillStyle(eoFill: true))
                         }
                     )
-                    .allowsHitTesting(false) // let taps through to the real control
+                    .allowsHitTesting(false) // let taps go through to real controls
 
-                // Use per-target copy
+                // Card content
                 VStack(spacing: 8) {
-                    Text(tour.titleForCurrent).font(.headline).bold()
+                    Text(tour.titleForCurrent)
+                        .font(.headline).bold()
+
                     Text(tour.messageForCurrent)
                         .font(.subheadline)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: 280)
+
+                    // CTA shown ONLY on the Training Maxes step
+                    if tour.currentTarget == .trainingMaxes {
+                        Button {
+                            tour.go(to: .helpIcon)
+                        } label: {
+                            Text("Next: Open User Guide")
+                                .font(.headline)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(.thinMaterial, in: Capsule())
+                        }
+                        .padding(.top, 6)
+                    }
+
                     Button("Skip") { tour.complete() }
                         .buttonStyle(.bordered)
                         .padding(.top, 2)
@@ -51,16 +71,20 @@ struct GearTourOverlay: View {
                 .position(cardPosition(around: rect, in: proxy.size))
                 .offset(manualOffset)
                 .gesture(
-                    DragGesture().onChanged { manualOffset = $0.translation }
-                                 .onEnded   { _ in manualOffset = .zero })
+                    DragGesture()
+                        .onChanged { manualOffset = $0.translation }
+                        .onEnded { _ in manualOffset = .zero }
+                )
             }
             .animation(.easeInOut(duration: 0.30), value: rect)
         )
     }
 
+    // MARK: - Card placement relative to highlighted rect
+
     private func cardPosition(around rect: CGRect, in size: CGSize) -> CGPoint {
         // Placement preferences per step
-        let forceBelow = (tour.currentTarget == .displayName)
+        let forceBelow = (tour.currentTarget == .displayName || tour.currentTarget == .helpIcon)
         let forceAbove = (tour.currentTarget == .trainingMaxes)
 
         let verticalPad: CGFloat = 110

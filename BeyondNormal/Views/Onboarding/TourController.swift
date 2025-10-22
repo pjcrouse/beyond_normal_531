@@ -4,6 +4,7 @@ enum TourTargetID: Hashable {
     case settingsGear
     case displayName
     case trainingMaxes
+    case helpIcon
 }
 
 final class TourController: ObservableObject {
@@ -19,7 +20,7 @@ final class TourController: ObservableObject {
 
     func complete() {
         isActive = false
-        hasSeenQuickTour = false // TODO: change to true once you don't want it to run all the time
+        hasSeenQuickTour = true
         currentTarget = nil
     }
     
@@ -30,10 +31,16 @@ final class TourController: ObservableObject {
 
     var titleForCurrent: String {
         switch currentTarget {
-        case .settingsGear:   return "Start here"
-        case .displayName:    return "Set Display Name"
-        case .trainingMaxes:  return "Set Training Maxes"
-        case .none:           return ""
+        case .settingsGear:
+            return "Start Here"
+        case .displayName:
+            return "Set Display Name"
+        case .trainingMaxes:
+            return "Your Training Maxes"
+        case .helpIcon:
+            return "Need Help?"
+        case .none:
+            return ""
         }
     }
 
@@ -42,9 +49,14 @@ final class TourController: ObservableObject {
         case .settingsGear:
             return "Tap the gear to open Settings and personalize Beyond Normal."
         case .displayName:
-            return "Your name prints on PR medals and share cards."
+            return "Your display name appears on PR medals and share cards."
         case .trainingMaxes:
-            return "Dial in your squat, bench, deadlift, press, and row."
+            return """
+Dial in your lift training maxes here in Settings.
+Don’t know what they are or how to estimate them? That’s okay — the next step will show you where to find answers in the User Guide.
+"""
+        case .helpIcon:
+            return "Tap the question mark next to the gear icon any time for help, tutorials, and FAQs."
         case .none:
             return ""
         }
