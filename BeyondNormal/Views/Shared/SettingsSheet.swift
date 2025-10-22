@@ -2,9 +2,17 @@ import SwiftUI
 
 struct SettingsSheet: View {
     @EnvironmentObject var settings: ProgramSettings
+    @EnvironmentObject var tour: TourController
+    @State private var sheetTargets: [TourTargetID: Anchor<CGRect>] = [:]
     @Environment(\.dismiss) private var dismiss
+    
+    // 👇 Define Field BEFORE using it anywhere
+    enum Field {
+        case squat, bench, deadlift, row, press, barWeight, roundTo, timerRegular, timerBBB
+    }
+    
     @FocusState private var focusedField: Field?
-
+    
     // Temp strings for numeric TextFields (to avoid fighting the keyboard)
     @State private var tmpSquat = ""
     @State private var tmpBench = ""
@@ -15,53 +23,134 @@ struct SettingsSheet: View {
     @State private var tmpRoundTo = ""
     @State private var tmpTimerRegular = ""
     @State private var tmpTimerBBB = ""
-
-    enum Field {
-        case squat, bench, deadlift, row, press, barWeight, roundTo, timerRegular, timerBBB
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                profileSection
-                trainingMaxesSection
-                workoutsPerWeekSection
-                loadingSection
-                bbbSection
-                restTimerSection
-                oneRMSection
-                tmProgressionSection
-                assistanceSection
-                implementsSection
-                behaviorSection
-                resetDefaultsSection
-                prsSection
-                helpSection
-            }
-            .navigationTitle("Settings")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Save") {
-                        saveAndClose()
-                        settings.save()
-                    }.bold()
-                }
-                if focusedField != nil {
-                    ToolbarItemGroup(placement: .keyboard) {
-                        Spacer()
-                        Button("Done") { focusedField = nil }
-                    }
-                }
-            }
-            .onAppear(perform: onAppearSetup)
+    
+    // Tour advance helper state
+    @State private var tmAdvanceArmed = false
+    
+    // 👇 Helpers can now refer to Field safely
+    private func isTMField(_ f: Field?) -> Bool {
+        guard let f = f else { return false }
+        switch f {
+        case .squat, .bench, .deadlift, .row, .press: return true
+        default: return false
         }
     }
-
+    
+    private func nextTMField(after f: Field) -> Field? {
+        switch f {
+        case .squat:   return .bench
+        case .bench:   return .deadlift
+        case .deadlift:return .row
+        case .row:     return .press
+        case .press:   return nil
+        default:       return nil
+        }
+    }
+    
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                // === SHEET CONTENT ===
+                NavigationStack {
+                    ScrollViewReader { scrollProxy in
+                        Form {
+                            profileSection
+                            trainingMaxesSection
+                            workoutsPerWeekSection
+                            loadingSection
+                            bbbSection
+                            restTimerSection
+                            oneRMSection
+                            tmProgressionSection
+                            assistanceSection
+                            implementsSection
+                            behaviorSection
+                            resetDefaultsSection
+                            prsSection
+                            helpSection
+                        }
+                        // Auto-scroll to the current tour target
+                        .onChange(of: tour.currentTarget) { _, newTarget in
+                            switch newTarget {
+                            case .displayName:
+                                withAnimation(.easeInOut) {
+                                    scrollProxy.scrollTo("profileDisplayName", anchor: .top)
+                                }
+                            case .trainingMaxes:
+                                withAnimation(.easeInOut) {
+                                    scrollProxy.scrollTo("trainingMaxes", anchor: .top)
+                                }
+                            default:
+                                break
+                            }
+                        }
+                        // Cancel pending TM advance if they refocus a TM field
+                        .onChange(of: focusedField) { _, newFocus in
+                            if tour.currentTarget == .trainingMaxes, isTMField(newFocus) {
+                                tmAdvanceArmed = false
+                            }
+                        }
+                    }
+                    .navigationTitle("Settings")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { dismiss() }
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Save") {
+                                saveAndClose()
+                                settings.save()
+                            }.bold()
+                        }
+                    }
+                    .onAppear(perform: onAppearSetup)
+                    
+                    // AMRAP-style bottom Done bar (bright; we'll cut a hole for it in the overlay)
+                    .safeAreaInset(edge: .bottom) {
+                        if focusedField != nil {
+                            HStack {
+                                Spacer()
+                                Button {
+                                    handleDoneButton()
+                                } label: {
+                                    Label("Done", systemImage: "keyboard.chevron.compact.down")
+                                        .font(.headline)
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 10)
+                                        .background(.ultraThinMaterial, in: Capsule())
+                                }
+                                Spacer()
+                            }
+                            .padding(.bottom, 6)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                            .zIndex(1)
+                        }
+                    }
+                    .animation(.easeInOut, value: focusedField != nil)
+                    
+                    // Collect tour targets inside THIS sheet
+                    .overlayPreferenceValue(TourTargetsPreferenceKey.self) { value in
+                        Color.clear
+                            .onAppear { sheetTargets = value }
+                            .onChange(of: value) { _, newValue in sheetTargets = newValue }
+                    }
+                } // END NavigationStack
+                
+                // === TOUR OVERLAY (shows for sheet steps) ===
+                if tour.isActive,
+                   let target = tour.currentTarget,
+                   target == .displayName || target == .trainingMaxes {
+                    // If you added the bottom-hole param in the overlay, pass it here to keep Done bright:
+                    // GearTourOverlay(targets: sheetTargets, proxy: proxy, excludeBottomHeight: (focusedField != nil ? 96 : 0))
+                    GearTourOverlay(targets: sheetTargets, proxy: proxy)
+                        .environmentObject(tour)
+                }
+            } // END ZStack
+        } // END GeometryReader
+    }
+    
     // MARK: - Sections
-
+    
     private var profileSection: some View {
         Section("Profile") {
             HStack {
@@ -71,13 +160,21 @@ struct SettingsSheet: View {
                     .multilineTextAlignment(.trailing)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.words)
+                    .onSubmit {         // 👈 hitting return can advance the tour
+                        if tour.currentTarget == .displayName {
+                            tour.go(to: .trainingMaxes)
+                        }
+                    }
             }
+            .id("profileDisplayName")              // 👈 scroll anchor
+            .tourTarget(id: .displayName)          // 👈 highlight this row
+            
             Text("Your name appears on PR award medals. Leave blank to use default.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
     }
-
+    
     private var trainingMaxesSection: some View {
         Section("Training Maxes (lb)") {
             numField("Squat", value: $tmpSquat, field: .squat)
@@ -86,8 +183,10 @@ struct SettingsSheet: View {
             numField("Row", value: $tmpRow, field: .row)
             numField("Press", value: $tmpPress, field: .press)
         }
+        .id("trainingMaxes")
+        .tourTarget(id: .trainingMaxes)
     }
-
+    
     private var workoutsPerWeekSection: some View {
         Section("Workouts per Week") {
             Picker("Count", selection: $settings.workoutsPerWeek) {
@@ -96,14 +195,14 @@ struct SettingsSheet: View {
                 Text("5 days").tag(5)
             }
             .pickerStyle(.segmented)
-
+            
             if settings.workoutsPerWeek == 4 {
                 Picker("4th Workout", selection: $settings.fourthLiftRaw) {
                     Text("Row").tag("row")
                     Text("Press").tag("press")
                 }
                 .pickerStyle(.segmented)
-
+                
                 Text("If 4 days: choose Row or Standing Press for Day 4.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -118,7 +217,7 @@ struct SettingsSheet: View {
             }
         }
     }
-
+    
     private var loadingSection: some View {
         Section("Loading") {
             numField("Default Bar Weight (lb)", value: $tmpBarWeight, field: .barWeight)
@@ -128,7 +227,7 @@ struct SettingsSheet: View {
                 .foregroundStyle(.secondary)
         }
     }
-
+    
     private var bbbSection: some View {
         Section("Assistance (BBB)") {
             HStack {
@@ -139,7 +238,7 @@ struct SettingsSheet: View {
             Slider(value: $settings.bbbPercent, in: 0.50...0.70, step: 0.05)
         }
     }
-
+    
     private var restTimerSection: some View {
         Section("Rest Timer (seconds)") {
             HStack {
@@ -169,7 +268,7 @@ struct SettingsSheet: View {
                 .foregroundStyle(.secondary)
         }
     }
-
+    
     private var oneRMSection: some View {
         Section(header: Text("1RM Formula")) {
             Picker("Estimation Formula", selection: $settings.oneRMFormula) {
@@ -178,7 +277,7 @@ struct SettingsSheet: View {
                 }
             }
             .pickerStyle(.segmented)
-
+            
             Text("Epley = simple/standard • Brzycki = conservative at high reps • Mayhew = research-based sigmoid")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -379,4 +478,31 @@ struct SettingsSheet: View {
         if let v = Int(tmpTimerBBB)      { settings.timerBBBSec     = max(1, v) }
         dismiss()
     }
+    
+    private func handleDoneButton() {
+        let wasTM = isTMField(focusedField)
+        focusedField = nil
+        UIApplication.shared.endEditing()
+
+        switch tour.currentTarget {
+        case .displayName:
+            // After name entry, show the Training Maxes section
+            tour.go(to: .trainingMaxes)
+
+        case .trainingMaxes:
+            if wasTM {
+                tmAdvanceArmed = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    if self.tmAdvanceArmed && self.focusedField == nil {
+                        // Not really entering TMs now, just moving on to help icon
+                        tour.go(to: .helpIcon)
+                    }
+                }
+            }
+
+        default:
+            break
+        }
+    }
 }
+
