@@ -19,7 +19,7 @@ final class TourController: ObservableObject {
 
     func complete() {
         isActive = false
-        hasSeenQuickTour = false // change to true once you don't want it to run all the time
+        hasSeenQuickTour = false // TODO: change to true once you don't want it to run all the time
         currentTarget = nil
     }
     
@@ -40,7 +40,7 @@ final class TourController: ObservableObject {
     var messageForCurrent: String {
         switch currentTarget {
         case .settingsGear:
-            return "Tap the gear to personalize Beyond Normal."
+            return "Tap the gear to open Settings and personalize Beyond Normal."
         case .displayName:
             return "Your name prints on PR medals and share cards."
         case .trainingMaxes:
