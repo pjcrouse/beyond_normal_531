@@ -12,7 +12,6 @@ struct UserGuideView: View {
                     title: "Beyond Normal",
                     subtitle: "5/3/1 training, simplified."
                 )
-                
 
                 // Program Configuration
                 GuideCard {
@@ -41,17 +40,96 @@ struct UserGuideView: View {
                     }
                 }
 
-                // Setting Your Initial TM
+                // 🔥 NEW: Finding Your Training Max (TM)
+                // 🔥 UPDATED: Finding Your Training Max (TM)
                 GuideCard {
                     VStack(alignment: .leading, spacing: 12) {
-                        SectionHeader("Setting Your Initial TM", systemImage: "gauge")
-                        Text("Most people don't know their real TM. Here's a safe starting method:")
+                        SectionHeader("Finding Your Training Max (TM)", systemImage: "gauge.with.dots.needle.bottom.50percent")
+                        Text("Your Training Max (TM) is the foundation of 5/3/1. It should be **~90% of your true 1-rep max** — a weight you know you can lift even on a bad day.")
                             .foregroundStyle(.primary)
-                        Bullet("Use your best recent lift and take ~85–90% of it.")
-                        Bullet("If you've never lifted: pick a weight for ~5 reps and estimate 1RM, then reduce by 10%.")
-                        Bullet("Start conservatively — it's okay if the first cycle feels lighter.")
-                        Text("Over time, let AMRAP estimates adjust it if you use auto mode. Configure in **Settings → Training Maxes**.")
-                            .font(.footnote).foregroundStyle(.secondary)
+
+                        Group {
+                            Text("**For Brand New Lifters**")
+                                .font(.subheadline.weight(.semibold))
+                                .padding(.top, 6)
+
+                            NumberedStep(1, "Learn the Movement (Week 1–2)",
+                                         detail: """
+                                         • Start with just the barbell (45 lb).
+                                         • **Deadlift exception:** Use **full-size bumper plates** so the bar is at standard height. Bumpers exist as light as **10 lb**; go as light as needed while keeping standard height. If that’s still too heavy, pull from blocks, use bumper-plate risers, or start with **Romanian deadlifts**.
+                                         • Do 3–5 sets of 5–8 reps.
+                                         • Focus entirely on consistent, repeatable form — not load.
+                                         • Great learning resources: **Juggernaut Training Systems – Pillars** series (Squat/Bench/Deadlift), **Barbell Medicine** technique articles/videos, **Stronger by Science** form guides, and **Alan Thrall**’s YouTube tutorials.
+                                         """)
+
+                            NumberedStep(2, "Warm Up Properly",
+                                         detail: """
+                                         • 5–10 minutes easy cardio + dynamic mobility.
+                                         • **At least one** movement-specific warm-up set **with the bar** (usually just one is plenty).
+                                         """)
+
+                            NumberedStep(3, "Build to Your **5-Rep Max (5RM)**",
+                                         detail: """
+                                         • Start with the bar for 5 reps.
+                                         • Use these **rules of thumb** for jumps:
+                                           – If the last set felt **incredibly easy**, you can **double** the previous jump.
+                                           – If you felt **any** struggle/slowdown, use steady jumps:
+                                             • Squat / Deadlift: **+10–20 lb per set**
+                                             • Bench / Press / Row: **+5–10 lb per set**
+                                         • Rest 3–5 minutes between sets.
+                                         • Stop when 5 reps are challenging but clean — like you might have 1–2 reps in reserve.
+                                         • **Do not** grind or sacrifice form. That clean set is your working **5RM**.
+                                         """)
+
+                            NumberedStep(4, "Calculate Your TM",
+                                         detail: """
+                                         Enter your 5RM in the app. We estimate your 1RM and set TM automatically:
+
+                                         `estimated 1RM ≈ 5RM × 1.15`
+                                         `Training Max = estimated 1RM × 0.90`
+                                         """)
+                                .padding(.bottom, 2)
+                        }
+
+                        Group {
+                            Text("**For Experienced Lifters**")
+                                .font(.subheadline.weight(.semibold))
+                                .padding(.top, 6)
+
+                            Bullet("**Option 1: I know my 1RM** — Enter it, we set TM to **90%**.")
+                            Bullet("**Option 2: I know my recent 5RM** — Enter it, we use the same formula: **TM = 5RM × 1.15 × 0.90**.")
+                        }
+
+                        Group {
+                            Text("**Important Guidelines**")
+                                .font(.subheadline.weight(.semibold))
+                                .padding(.top, 6)
+
+                            Bullet("✓ **When in doubt, go lighter.** It’s better to start too light and build than start too heavy and stall.")
+                            Bullet("✓ **Week 1 should feel easy.** TM is conservative by design; intensity grows across the cycle.")
+                            Bullet("✓ **Form over weight.** Starting light engrains technique. Strength comes quickly when movement quality is high.")
+                            Bullet("✓ **Be honest.** Inflating numbers breaks the program.")
+                            Bullet("✓ **Adjust if needed.** If the first cycle is far too easy or too hard, reset TMs before the next cycle.")
+                        }
+
+                        Group {
+                            Text("**Red Flags Your TM Is Too High**")
+                                .font(.subheadline.weight(.semibold))
+                                .padding(.top, 6)
+
+                            Bullet("You’re grinding in Week 1.")
+                            Bullet("You’re failing reps before AMRAP.")
+                            Bullet("Form breaks down on work sets.")
+                            Bullet("You’re consistently missing target reps.")
+                            Text("If these happen, lower TM by **~10%** and rebuild. That’s smart training, not failure.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+
+                        // Philosophy note
+                        Text("**No ‘practice weeks’ needed — just learn.** Be strict about form, start light, and let the program teach you. You’ll master the movements faster and progress longer.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 6)
                     }
                 }
 
@@ -79,7 +157,7 @@ struct UserGuideView: View {
                         Bullet("**Week 4 (Deload):** 40%, 50%, 60% × 5 reps each")
                         Text("After completing all lifts in a week (if Auto-advance is on), you move to the next week. After Week 4, you advance to **Cycle 2, Week 1**, and your TMs increase based on your progression style.")
                             .font(.footnote).foregroundStyle(.secondary)
-                        Text("It's great for beginner → intermediate lifters because periodization is tricky, and 5/3/1 removes complexity. Many lifters use this for years with tweaks in assistance, volume, or auto-TM modes.")
+                        Text("It’s great for beginner → intermediate lifters because periodization is tricky, and 5/3/1 removes complexity. Many lifters use this for years with tweaks in assistance, volume, or auto-TM modes.")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                 }
@@ -107,9 +185,9 @@ struct UserGuideView: View {
                 GuideCard {
                     VStack(alignment: .leading, spacing: 12) {
                         SectionHeader("Deload Week", systemImage: "leaf.arrow.circlepath")
-                        Text("Every fourth week is a **deload** — a planned recovery phase using lighter weights (40-60% TM) and lower volume.")
+                        Text("Every fourth week is a **deload** — a planned recovery phase using lighter weights (40–60% TM) and lower volume.")
                             .foregroundStyle(.primary)
-                        Text("It might feel like you're taking a step back, but deloads are where your body actually **adapts and grows stronger** from accumulated stress.")
+                        Text("It might feel like you’re taking a step back, but deloads are where your body actually **adapts and grows stronger** from accumulated stress.")
                             .foregroundStyle(.secondary)
                         Bullet("Reduces fatigue and joint stress.")
                         Bullet("Allows nervous system and connective tissues to recover.")
@@ -125,26 +203,26 @@ struct UserGuideView: View {
                         SectionHeader("TM Progression Strategies", systemImage: "chart.line.uptrend.xyaxis")
                         Text("After each 4-week cycle, your Training Maxes increase. Choose your progression style:")
                             .foregroundStyle(.primary)
-                        
+
                         VStack(alignment: .leading, spacing: 8) {
                             Text("**Classic Progression (Default)**")
                                 .font(.subheadline)
-                            Bullet("Upper body (Bench, Row, Press): +5 lbs")
-                            Bullet("Lower body (Squat, Deadlift): +10 lbs")
+                            Bullet("Upper body (Bench, Row, Press): +5 lb")
+                            Bullet("Lower body (Squat, Deadlift): +10 lb")
                             Text("Simple, steady, and the traditional 5/3/1 approach. Best for beginners.")
                                 .font(.footnote).foregroundStyle(.secondary)
                         }
-                        
+
                         VStack(alignment: .leading, spacing: 8) {
                             Text("**Auto Progression (AMRAP-Based)**")
                                 .font(.subheadline)
                             Bullet("Sets TM to 90% of your best AMRAP-estimated 1RM from the completed cycle")
-                            Bullet("Capped at +10 lbs upper / +20 lbs lower per cycle (prevents overreaching)")
+                            Bullet("Capped at +10 lb upper / +20 lb lower per cycle (prevents overreaching)")
                             Bullet("Only progresses lifts you actually performed (respects 3/4/5 day config)")
                             Text("More responsive to your actual performance. Best for intermediate lifters who consistently hit strong AMRAPs.")
                                 .font(.footnote).foregroundStyle(.secondary)
                         }
-                        
+
                         Text("Choose in **Settings → TM Progression Style**. When you advance cycles, you'll see a summary showing old → new TMs.")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
@@ -154,33 +232,33 @@ struct UserGuideView: View {
                 GuideCard {
                     VStack(alignment: .leading, spacing: 12) {
                         SectionHeader("BBB & Assistance Work", systemImage: "figure.run")
-                        Text("After your 3 main sets, you'll do **Boring But Big (BBB)** volume work and assistance exercises:")
+                        Text("After your 3 main sets, you’ll do **Boring But Big (BBB)** volume work and assistance exercises:")
                             .foregroundStyle(.primary)
-                        
+
                         VStack(alignment: .leading, spacing: 8) {
                             Text("**BBB (5×10)**")
                                 .font(.subheadline)
-                            Bullet("5 sets of 10 reps at 50-70% of your TM (you choose in Settings)")
+                            Bullet("5 sets of 10 reps at 50–70% of your TM (you choose in Settings)")
                             Bullet("Default is 50% — adjust in **Settings → Assistance (BBB)**")
                             Bullet("You can log custom weights per BBB set if needed")
                             Bullet("Skipped during deload week")
                         }
-                        
+
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("**Assistance Exercises (2-3 sets)**")
+                            Text("**Assistance Exercises (2–3 sets)**")
                                 .font(.subheadline)
                             Bullet("Choose one assistance exercise per main lift")
                             Bullet("Built-in library organized by category (legs, push, pull, core)")
                             Bullet("Configure in **Settings → Assistance Exercises**")
                             Bullet("Also skipped during deload week")
                         }
-                        
+
                         VStack(alignment: .leading, spacing: 8) {
                             Text("**Smart Cascade Feature**")
                                 .font(.subheadline)
                             Text("When you change the weight or reps on any BBB or assistance set, it automatically **cascades down** to all remaining sets in that exercise.")
                                 .font(.footnote).foregroundStyle(.secondary)
-                            Bullet("Change Set 1 weight → Sets 2-5 update automatically")
+                            Bullet("Change Set 1 weight → Sets 2–5 update automatically")
                             Bullet("Perfect for adjusting on the fly based on how you feel")
                             Bullet("Saves time — no need to update each set manually")
                         }
@@ -233,7 +311,7 @@ struct UserGuideView: View {
                         Bullet("Date, lift, estimated 1RM (from AMRAP), and total volume")
                         Bullet("BBB % used and AMRAP reps")
                         Bullet("Notes you added that day")
-                        
+
                         Text("**Program Week Summaries:**")
                             .font(.subheadline)
                             .padding(.top, 4)
@@ -241,28 +319,28 @@ struct UserGuideView: View {
                         Bullet("See all lifts completed that week with AMRAP results")
                         Bullet("View total volume and best estimated 1RMs")
                         Bullet("Track progress trends across cycles")
-                        
+
                         Text("Find everything in **History** (top-left clock icon).")
                             .font(.footnote).foregroundStyle(.secondary)
                         Bullet("Tap an entry to expand notes; long-press for **Share summary** or **Delete**")
                         Bullet("Tap the week header icon for **Program Week Summary**; use **Share** on that screen")
                     }
                 }
-                
+
                 // Data Management & Export
                 GuideCard {
                     VStack(alignment: .leading, spacing: 12) {
                         SectionHeader("Data Management & Export", systemImage: "externaldrive.fill")
                         Text("Backup, export, and manage all your workout data:")
                             .foregroundStyle(.primary)
-                        
+
                         Text("**Export Your Data:**")
                             .font(.subheadline)
                             .padding(.top, 4)
                         Bullet("**Export All Data (JSON):** Complete backup with all workouts, PRs, and metadata")
                         Bullet("**Export Workouts (CSV):** Open in Excel or Google Sheets for analysis")
                         Bullet("**Export PRs (CSV):** Track your progress over time in spreadsheets")
-                        
+
                         Text("**Manage Your Data:**")
                             .font(.subheadline)
                             .padding(.top, 8)
@@ -271,13 +349,13 @@ struct UserGuideView: View {
                         Bullet("**Delete Workouts:** Remove individual entries with confirmation")
                         Bullet("**View All PRs:** See personal records by lift and by cycle")
                         Bullet("**Storage Stats:** Monitor how much space your data uses")
-                        
+
                         Text("**Where to Find It:**")
                             .font(.subheadline)
                             .padding(.top, 8)
                         Text("Tap the **Data** icon (📂) in the top-left corner of the main screen, next to History.")
                             .font(.footnote).foregroundStyle(.secondary)
-                        
+
                         Text("**Why Export?**")
                             .font(.subheadline)
                             .padding(.top, 8)
@@ -285,12 +363,12 @@ struct UserGuideView: View {
                         Bullet("Analyze your progress in spreadsheet apps")
                         Bullet("Keep a copy for your records")
                         Bullet("Switch devices or apps with your data intact")
-                        
+
                         Text("All exports include timestamps and can be imported back into the app (JSON format only).")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                 }
-                
+
                 // Sharing
                 GuideCard {
                     VStack(alignment: .leading, spacing: 12) {
@@ -316,14 +394,14 @@ struct UserGuideView: View {
                         NumberedStep(1, "Open Settings", detail: "Settings → Implements → Configure Implements.")
                         NumberedStep(2, "Set bar weights", detail: "Override default bar weight for each lift.")
                         NumberedStep(3, "Affects calculations", detail: "Used for plate math, warmup guidance, and displays.")
-                        
+
                         Text("**Examples:**")
                             .font(.subheadline)
                             .padding(.top, 4)
-                        Bullet("Safety Squat Bar: 75 lbs (not 45)")
-                        Bullet("EZ Curl Bar: 25 lbs")
-                        Bullet("Trap Bar: 60 lbs")
-                        
+                        Bullet("Safety Squat Bar: 75 lb (not 45)")
+                        Bullet("EZ Curl Bar: 25 lb")
+                        Bullet("Trap Bar: 60 lb")
+
                         Text("This ensures plate recommendations are accurate when using non-standard equipment. Warmup guidance automatically respects these weights.")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
@@ -335,11 +413,11 @@ struct UserGuideView: View {
                         SectionHeader("Rest Timer", systemImage: "timer")
                         Text("The Rest Timer card helps maintain consistent rest periods between sets:")
                             .foregroundStyle(.primary)
-                        
+
                         FeatureRow("Two presets", "Regular sets (180s) and BBB/accessory (120s)", "2.circle.fill")
                         FeatureRow("Full controls", "Start, Pause, Resume, and Reset", "playpause.circle")
                         FeatureRow("Notifications", "Get notified when rest period completes", "bell.fill")
-                        
+
                         Text("Configure timer durations in **Settings → Rest Timer**. Tip: 240s = 4:00, 180s = 3:00, 120s = 2:00.")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
@@ -359,7 +437,7 @@ struct UserGuideView: View {
                     }
                 }
 
-                // FAQ (collapsible)
+                // FAQ
                 GuideCard {
                     VStack(alignment: .leading, spacing: 12) {
                         SectionHeader("FAQ", systemImage: "questionmark.circle")
@@ -372,35 +450,29 @@ struct UserGuideView: View {
                         FAQ("Why is the estimated 1RM blank?",
                             "It appears after you enter AMRAP reps on the final set for Weeks 1–3. Week 4 (deload) has no AMRAP, so no estimate is calculated.")
                         FAQ("What's the difference between Classic and Auto progression?",
-                            "Classic adds fixed amounts each cycle (+5/+10 lbs). Auto uses your best AMRAP performance to set the new TM to 90% of your estimated 1RM, capped at +10/+20 to prevent overreaching. Beginners should use Classic.")
+                            "Classic adds fixed amounts each cycle (+5/+10 lb). Auto uses your best AMRAP performance to set the new TM to 90% of your estimated 1RM, capped at +10/+20 to prevent overreaching. Beginners should use Classic.")
                         FAQ("Why didn't my TM auto-increase the full amount?",
-                            "Auto progression is capped at +10 lbs upper / +20 lbs lower per cycle to prevent overreaching. If your AMRAP suggested a bigger jump, it's intentionally limited for sustainable progress.")
+                            "Auto progression is capped at +10 lb upper / +20 lb lower per cycle to prevent overreaching. If your AMRAP suggested a bigger jump, it's intentionally limited for sustainable progress.")
                         FAQ("How do Awards work?",
                             "Awards are automatically generated when you set a new all-time PR (personal record) based on your estimated 1RM from AMRAP performance. They're stored in your Trophy Room, accessible from PRs & Awards.")
                         FAQ("Can I use different bars for different lifts?",
                             "Yes! Configure per-exercise bar weights in Settings → Implements. This affects plate math, warmup guidance, and weight displays. Great for specialty bars like SSB, trap bar, or EZ curl bar.")
                         FAQ("What happens during deload week?",
-                            "Week 4 is your deload — a built-in recovery phase. You'll use lighter weights (40-60% TM), lower volume, and skip BBB/assistance work so your body can heal and adapt. Focus this week on sleep, nutrition, stress management, and gentle movement — light cardio, walks, mobility work. This isn't downtime; it's where progress locks in and you recharge for the next cycle.")
+                            "Week 4 is your deload — a built-in recovery phase. You'll use lighter weights (40–60% TM), lower volume, and skip BBB/assistance work so your body can heal and adapt. Focus this week on sleep, nutrition, stress management, and gentle movement — light cardio, walks, mobility work.")
                         FAQ("How do I share a workout or week?",
                             "Long-press a history entry and choose **Share summary**. For weeks, open **Program Week Summary** and tap **Share** in the top-right.")
-
                         FAQ("Why does Messages show a subject line sometimes?",
                             "If the subject field is enabled in your Messages settings, iOS will show a subject row. The content you share still appears in the body so recipients always see it.")
-                        
                         FAQ("How do I backup my data?",
-                            "Tap **Data** (📂 icon) in the top-left → **Export All Data (JSON)**. Save the file to iCloud Drive or Files app. This includes all workouts, PRs, and settings.")
-
+                            "Tap **Data** (📂 icon) in the top-left → **Export All Data (JSON)**. Save the file to iCloud Drive or Files app.")
                         FAQ("Can I view my data in Excel?",
-                            "Yes! Tap **Data** → **Export Workouts (CSV)** or **Export PRs (CSV)**. Open the exported file in Excel, Numbers, or Google Sheets.")
-
+                            "Yes! Tap **Data** → **Export Workouts (CSV)** or **Export PRs (CSV)** and open in Excel, Numbers, or Google Sheets.")
                         FAQ("How do I delete a single workout?",
                             "Tap **Data** → **View All Workouts** → tap the workout → **Delete Workout**. Or swipe left on any workout in History and tap Delete.")
-
                         FAQ("What happens to my data if I delete the app?",
                             "All local data is deleted. Export your data regularly to Files or iCloud for safekeeping.")
-
                         FAQ("How much storage does my data use?",
-                            "Tap **Data** to see storage statistics at the top. Typical usage: ~1KB per workout, so even 1,000 workouts = ~1MB.")
+                            "Tap **Data** to see storage statistics at the top. Typical usage: ~1KB per workout, so even 1,000 workouts ≈ ~1MB.")
                     }
                 }
 
@@ -432,11 +504,9 @@ struct UserGuideView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarBackground(Color(.systemBackground), for: .navigationBar)
         .toolbar {
-            // You already provide a Done button when presented as a sheet.
-            // This adds one automatically when the view is pushed (e.g., from Settings).
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Done") { dismiss() }
-                    .opacity(isPresentedModally ? 1 : 0) // will still be hidden when genuinely pushed
+                    .opacity(isPresentedModally ? 1 : 0)
                     .accessibilityHidden(!isPresentedModally)
             }
         }
@@ -444,7 +514,6 @@ struct UserGuideView: View {
 
     // Detect if the view is presented modally (best effort).
     private var isPresentedModally: Bool {
-        // If there's no presenting controller, we assume it's pushed.
         #if canImport(UIKit)
         return (UIApplication.shared.connectedScenes.first as? UIWindowScene)?
             .windows.first?.rootViewController?.presentedViewController != nil
@@ -461,7 +530,6 @@ private struct GuideHero: View {
     let subtitle: String
     var body: some View {
         ZStack {
-            // 🔥 Updated gradient (slightly stronger for better contrast)
             LinearGradient(
                 colors: [Color(hex: "e55722").opacity(0.22), Color(hex: "2c7f7a").opacity(0.16)],
                 startPoint: .topLeading, endPoint: .bottomTrailing
@@ -481,7 +549,7 @@ private struct GuideHero: View {
             }
             .padding(18)
         }
-        .overlay( // soft border shadow
+        .overlay(
             RoundedRectangle(cornerRadius: 24)
                 .strokeBorder(.quaternary, lineWidth: 1)
         )
@@ -601,3 +669,4 @@ private enum AppInfo {
         return "v\(v) (\(b))"
     }
 }
+

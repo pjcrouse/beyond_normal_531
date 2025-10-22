@@ -623,7 +623,12 @@ struct ContentView: View {
         if let fromBuiltIn = AssistanceExercise.byID(id) {
             return fromBuiltIn
         }
-        // 3) Fallback
+        // 3) Lift-aware fallback: choose the first option that matches this lift's picker categories
+        let categories = lift.categoriesForPicker  // defined in ExercisePickerView extension
+        if let safe = AssistanceLibrary.shared.allExercises.first(where: { categories.contains($0.category) }) {
+            return safe
+        }
+        // Absolute last resort (should never hit): keep the old crash-safe path
         return AssistanceExercise.catalog.first!
     }
     
