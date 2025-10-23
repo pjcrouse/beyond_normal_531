@@ -87,6 +87,10 @@ struct ContentView: View {
     
     @State private var pendingAdvance: AdvanceOutcome? = nil
     
+    @State private var showPaywall: Bool = false
+    
+    @EnvironmentObject private var purchases: PurchaseManager
+    
     private var isUpper: (Lift) -> Bool { { $0 == .bench || $0 == .press || $0 == .row } }
     private var isLower: (Lift) -> Bool { { $0 == .squat || $0 == .deadlift } }
     
@@ -279,7 +283,18 @@ struct ContentView: View {
                                 .padding(.horizontal)
                         }
                     }
-                }
+                    // === PAYWALL OVERLAY LAST (on top) ===
+                    if !purchases.isPro {
+                        Color.black.opacity(0.4).ignoresSafeArea()  // dimmer
+                        VStack {
+                            Spacer()
+                            PaywallView()
+                                .environmentObject(purchases) // pass it in
+                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+                                .padding()
+                        }
+                        .transition(.opacity)
+                    }                }
                 .tint(Color.brandAccent)
                 .sheet(isPresented: $showSettings) {
                     SettingsSheet()
@@ -318,6 +333,11 @@ struct ContentView: View {
                     )
                     .presentationDetents([.medium, .large])
                     .preferredColorScheme(.dark)
+                }
+                .sheet(isPresented: $showPaywall) {
+                    PaywallView()
+                        .environmentObject(purchases)
+                        .presentationDetents([.medium, .large])
                 }
                 .alert("Reset current lift?", isPresented: $showResetConfirm) {
                     Button("Reset", role: .destructive) { resetCurrentLift() }
@@ -581,18 +601,32 @@ struct ContentView: View {
     
     private var finishButton: some View {
         let alreadySaved = isWorkoutSaved(lift: selectedLift, week: currentWeek, cycle: currentCycle)
+        let locked       = !purchases.isPro
 
         return Button {
-            finishWorkout()
+            guard !alreadySaved else { return }        // don’t do anything if already saved
+            if locked {
+                showPaywall = true                     // not Pro → show paywall
+            } else {
+                finishWorkout()                        // Pro → finish as normal
+            }
         } label: {
-            Label(alreadySaved ? "Already Saved" : "Finish Workout",
-                  systemImage: alreadySaved ? "checkmark.seal.fill" : "checkmark.seal.fill")
-                .font(.headline)
+            Label(
+                alreadySaved ? "Already Saved" :
+                (locked ? "Unlock to Finish" : "Finish Workout"),
+                systemImage: alreadySaved ? "checkmark.seal.fill" :
+                              (locked ? "lock.fill" : "checkmark.seal.fill")
+            )
+            .font(.headline)
         }
         .buttonStyle(.borderedProminent)
+        // Keep the visual “saved” state dimmed; keep locked state fully tappable (to show paywall)
         .disabled(alreadySaved)
         .opacity(alreadySaved ? 0.55 : 1.0)
-        .accessibilityLabel(alreadySaved ? "Workout already saved" : "Finish workout")
+        .accessibilityLabel(
+            alreadySaved ? "Workout already saved" :
+            (locked ? "Unlock to finish workout" : "Finish workout")
+        )
     }
     
     private var resetButton: some View {

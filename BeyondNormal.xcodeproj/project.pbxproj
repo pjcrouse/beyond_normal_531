@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		F87453A92EAA24380069DB48 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F87453A82EAA24380069DB48 /* StoreKit.framework */; };
+		F87453AE2EAA28070069DB48 /* StoreKit.storekit in Resources */ = {isa = PBXBuildFile; fileRef = F87453AD2EAA28070069DB48 /* StoreKit.storekit */; };
 		F89781D42EA0A07800CD1F7A /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F89781D32EA0A07800CD1F7A /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
@@ -22,14 +24,29 @@
 
 /* Begin PBXFileReference section */
 		F831DC022E946F8000293177 /* BeyondNormal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BeyondNormal.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F87453A82EAA24380069DB48 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
+		F87453AD2EAA28070069DB48 /* StoreKit.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = StoreKit.storekit; sourceTree = "<group>"; };
 		F89781D32EA0A07800CD1F7A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		F89781D82EA0F59300CD1F7A /* BeyondNormal.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = BeyondNormal.xctestplan; sourceTree = "<group>"; };
 		F8DC5BBF2E9D24FF00603608 /* BeyondNormalTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BeyondNormalTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		F87453B32EAA60CD0069DB48 /* Exceptions for "BeyondNormal" folder in "BeyondNormal" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = F831DC012E946F8000293177 /* BeyondNormal */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		F831DC042E946F8000293177 /* BeyondNormal */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				F87453B32EAA60CD0069DB48 /* Exceptions for "BeyondNormal" folder in "BeyondNormal" target */,
+			);
 			path = BeyondNormal;
 			sourceTree = "<group>";
 		};
@@ -45,6 +62,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F87453A92EAA24380069DB48 /* StoreKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -61,10 +79,12 @@
 		F831DBF92E946F8000293177 = {
 			isa = PBXGroup;
 			children = (
+				F87453AD2EAA28070069DB48 /* StoreKit.storekit */,
 				F89781D82EA0F59300CD1F7A /* BeyondNormal.xctestplan */,
 				F89781D32EA0A07800CD1F7A /* PrivacyInfo.xcprivacy */,
 				F831DC042E946F8000293177 /* BeyondNormal */,
 				F8DC5BC02E9D24FF00603608 /* BeyondNormalTests */,
+				F87453A72EAA24380069DB48 /* Frameworks */,
 				F831DC032E946F8000293177 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -76,6 +96,14 @@
 				F8DC5BBF2E9D24FF00603608 /* BeyondNormalTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		F87453A72EAA24380069DB48 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				F87453A82EAA24380069DB48 /* StoreKit.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -170,6 +198,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F87453AE2EAA28070069DB48 /* StoreKit.storekit in Resources */,
 				F89781D42EA0A07800CD1F7A /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -340,6 +369,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BeyondNormal/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -370,6 +400,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BeyondNormal/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
