@@ -826,7 +826,8 @@ struct ContentView: View {
             amrapReps: workoutState.getAMRAP(lift: selectedLift.rawValue, week: currentWeek),
             notes: workoutNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : workoutNotes,
             programWeek: currentWeek,
-            cycle: currentCycle
+            cycle: currentCycle,
+            configKey: "\(settings.workoutsPerWeek)-\(settings.fourthLiftRaw)"
         )
 
         // Persist
@@ -1175,10 +1176,12 @@ struct ContentView: View {
     
     private func isWorkoutSaved(lift: Lift, week: Int, cycle: Int) -> Bool {
         let key = lift.label.lowercased()
+        let currentConfig = "\(settings.workoutsPerWeek)-\(settings.fourthLiftRaw)"
         return WorkoutStore.shared.workouts.contains {
             $0.cycle == cycle &&
             $0.programWeek == week &&
-            $0.lift.lowercased() == key
+            $0.lift.lowercased() == key &&
+            $0.configKey == currentConfig
         }
     }
     }
