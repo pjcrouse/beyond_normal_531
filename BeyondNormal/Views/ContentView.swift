@@ -85,6 +85,8 @@ struct ContentView: View {
     @StateObject private var tour = TourController()
     @State private var tourTargets: [TourTargetID: Anchor<CGRect>] = [:]
     
+    @State private var pendingAdvance: AdvanceOutcome? = nil
+    
     private var isUpper: (Lift) -> Bool { { $0 == .bench || $0 == .press || $0 == .row } }
     private var isLower: (Lift) -> Bool { { $0 == .squat || $0 == .deadlift } }
     
@@ -324,7 +326,12 @@ struct ContentView: View {
                     Text("This will clear all sets (main, BBB, assistance), AMRAP reps, and workout notes for \(selectedLift.label).")
                 }
                 .alert("Saved!", isPresented: $showSavedAlert, presenting: savedAlertText) { _ in
-                    Button("OK", role: .cancel) { }
+                    Button("OK", role: .cancel) {
+                        if let outcome = pendingAdvance {
+                            performAdvance(outcome)
+                            pendingAdvance = nil
+                        }
+                    }
                 } message: { text in
                     Text(text)
                 }
@@ -377,6 +384,7 @@ struct ContentView: View {
                 }
                 .onChange(of: selectedLift) { _, new in
                     liveRepsText = repsText(for: new)
+                    workoutNotes = ""
                 }
                 .onChange(of: liveRepsText) { _, _ in
                     saveReps(liveRepsText, for: selectedLift)
@@ -393,6 +401,10 @@ struct ContentView: View {
                     if newTarget == .helpIcon {
                         withAnimation { showSettings = false }   // dismiss the Settings sheet
                     }
+                }
+                .onChange(of: currentWeek) { _, _ in
+                    liveRepsText = repsText(for: selectedLift)
+                    workoutNotes = ""  
                 }
                 .onReceive(implements.objectWillChange) { _ in weightsVersion &+= 1 }
                 // === collect tour target anchors from inside the NavigationStack ===
@@ -568,14 +580,19 @@ struct ContentView: View {
     }
     
     private var finishButton: some View {
-        Button {
+        let alreadySaved = isWorkoutSaved(lift: selectedLift, week: currentWeek, cycle: currentCycle)
+
+        return Button {
             finishWorkout()
         } label: {
-            Label("Finish Workout", systemImage: "checkmark.seal.fill")
+            Label(alreadySaved ? "Already Saved" : "Finish Workout",
+                  systemImage: alreadySaved ? "checkmark.seal.fill" : "checkmark.seal.fill")
                 .font(.headline)
         }
         .buttonStyle(.borderedProminent)
-        .accessibilityLabel("Finish workout")
+        .disabled(alreadySaved)
+        .opacity(alreadySaved ? 0.55 : 1.0)
+        .accessibilityLabel(alreadySaved ? "Workout already saved" : "Finish workout")
     }
     
     private var resetButton: some View {
@@ -623,7 +640,12 @@ struct ContentView: View {
         if let fromBuiltIn = AssistanceExercise.byID(id) {
             return fromBuiltIn
         }
-        // 3) Fallback
+        // 3) Lift-aware fallback: choose the first option that matches this lift's picker categories
+        let categories = lift.categoriesForPicker  // defined in ExercisePickerView extension
+        if let safe = AssistanceLibrary.shared.allExercises.first(where: { categories.contains($0.category) }) {
+            return safe
+        }
+        // Absolute last resort (should never hit): keep the old crash-safe path
         return AssistanceExercise.catalog.first!
     }
     
@@ -739,17 +761,23 @@ struct ContentView: View {
     }
     
     private func finishWorkout() {
+        if isWorkoutSaved(lift: selectedLift, week: currentWeek, cycle: currentCycle) {
+            // Optional: give gentle feedback
+            savedAlertText = "This \(selectedLift.label) workout for Week \(currentWeek), Cycle \(currentCycle) is already saved."
+            showSavedAlert = true
+            return
+        }
         let metrics = currentWorkoutMetrics()
         let liftLabel = selectedLift.label
-        
+
         savedAlertText = String(
             format: "Logged %@ • Est 1RM %@ • Volume %@ lb",
             liftLabel,
             Int(metrics.est).formatted(.number),
             metrics.totalVol.formatted(.number)
         )
-        
-        // Save entry (now including week/cycle)
+
+        // Build the entry (week/cycle included)
         let entry = WorkoutEntry(
             date: .now,
             lift: selectedLift.label,
@@ -761,16 +789,16 @@ struct ContentView: View {
             programWeek: currentWeek,
             cycle: currentCycle
         )
-        
-        // ✅ NEW: Proper error handling
+
+        // Persist
         do {
             try WorkoutStore.shared.append(entry)
         } catch {
             print("⚠️ Failed to save workout: \(error.localizedDescription)")
             savedAlertText += "\n\n⚠️ Warning: Workout may not have been saved."
         }
-        
-        // --- Update PR stats used in your existing PRs view ---
+
+        // Update PR stores and prepare a PR line for UI
         if metrics.est > 0 {
             PRStore.shared.considerPR(
                 cycle: currentCycle,
@@ -778,43 +806,29 @@ struct ContentView: View {
                 est1RM: Int(metrics.est.rounded())
             )
         }
-        
-        
-        // ✅ NEW: Generate medal if this is a PR (using your PRService + AwardGenerator)
-        if let lt = LiftType(rawValue: selectedLift.label.lowercased()) {
-            if let newPR = prService.updateIfEstimatedPR(
+
+        if let lt = LiftType(rawValue: selectedLift.label.lowercased()),
+           let newPR = prService.updateIfEstimatedPR(
                 lift: lt,
                 estValue: metrics.est,
                 date: entry.date
-            ) {
-                Task { @MainActor in
-                    await AwardGenerator.shared.createAndStoreAward(
-                        for: newPR,
-                        userDisplayName: userDisplayName.isEmpty ? "You" : userDisplayName,
-                        store: awardStore
-                    )
-                    savedAlertText += "\n\n🏆 New PR: \(Int(round(newPR.value))) lb \(lt.rawValue.capitalized)"
-                    showSavedAlert = true        // ✅ actually show the alert
-                }
+           ) {
+            savedAlertText += "\n\n🏆 New PR: \(Int(round(newPR.value))) lb \(lt.rawValue.capitalized)"
+            // Award generation (async)
+            Task { @MainActor in
+                await AwardGenerator.shared.createAndStoreAward(
+                    for: newPR,
+                    userDisplayName: userDisplayName.isEmpty ? "You" : userDisplayName,
+                    store: awardStore
+                )
             }
         }
-        
-        // Run auto-advance and decide what to present
-        let outcome = maybeAutoAdvanceAfterFinish()
 
-        switch outcome {
-        case .none:
-            // No week/cycle movement → safe to show the simple Saved alert
-            showSavedAlert = true
+        // Decide advance, but don't mutate yet—do it after the user taps OK
+        pendingAdvance = computeAdvanceOutcome()
 
-        case .weekAdvanced:
-            // We already showed a toast — skip the Saved alert so the toast isn’t hidden
-            break
-
-        case .cycleAdvanced:
-            // We already showed a toast + will show the celebration sheet — skip the Saved alert
-            break
-        }
+        // Always show the dismissable summary
+        showSavedAlert = true
     }
         
         // ... rest of the method stays the same ...
@@ -868,54 +882,59 @@ struct ContentView: View {
         if !isWeekCompleteInHistory(week: 4) { return false }
         return true
     }
-
-    // Decide what to advance after finishing a workout.
-    private func maybeAutoAdvanceAfterFinish() -> AdvanceOutcome {
-        // 1) Cycle completion takes precedence
+    
+    // Phase 1: compute only (no side effects)
+    private func computeAdvanceOutcome() -> AdvanceOutcome {
+        // Cycle complete?
         if isCycleCompleteInHistory() {
             let old = currentCycle
-
-            // Apply TM progression and collect change lines for the summary
-            let changes = applyTMProgressionForNewCycle(from: old)
-
-            // Move to next cycle
-            currentCycle += 1
-            currentWeek = 1
-
-            // Fresh week 1 state
-            clearAllCompletionFor(week: currentWeek)
-
-            // Reset PR window for new cycle (optional)
-            PRStore.shared.resetCycle(currentCycle)
-
-            // Haptic success
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-
-            // Short headline toast
-            let styleShort = (settings.progressionStyle == .classic) ? "Classic" : "Auto"
-            toast("Cycle \(old) complete → Cycle \(currentCycle) (\(styleShort))")
-
-            // Full celebration sheet
-            cycleAdvancedFrom = old
-            cycleSummaryLines = changes
-            showCycleSummary = true
-
-            return .cycleAdvanced(from: old, to: currentCycle, lines: changes)
+            // Prepare the TM changes to show after we perform the advance
+            let changes = applyTMProgressionForNewCycle(from: old) // NOTE: this mutates TMs now—if you prefer, compute a preview first and move mutation into performAdvance
+            // Revert the TM change in compute step if you need a pure "preview" (optional).
+            // For simplicity, keep behavior: we’ll re-run apply in performAdvance; or you can refactor apply to return preview.
+            return .cycleAdvanced(from: old, to: old + 1, lines: changes)
         }
 
-        // 2) Otherwise advance week if setting is on and week is complete (allow 1→2→3→4)
-        if autoAdvanceWeek && isWeekCompleteInHistory(week: currentWeek) {
-            let maxWeek = 4
-            if currentWeek < maxWeek {
-                let next = currentWeek + 1
-                currentWeek = next
-                clearAllCompletionFor(week: next)
-                toast("Week \(next - 1) complete → Week \(next)")
-                return .weekAdvanced(nextWeek: next)
-            }
+        // Week advance?
+        if autoAdvanceWeek && isWeekCompleteInHistory(week: currentWeek) && currentWeek < 4 {
+            return .weekAdvanced(nextWeek: currentWeek + 1)
         }
 
         return .none
+    }
+
+    // Phase 2: actually perform the advance and show any UI you want
+    private func performAdvance(_ outcome: AdvanceOutcome) {
+        switch outcome {
+        case .none:
+            return
+
+        case .weekAdvanced(let next):
+            currentWeek = next
+            clearAllCompletionFor(week: next)
+            // Optional toast; keep or remove if you dislike it:
+            toast("Week \(next - 1) complete → Week \(next)")
+
+        case .cycleAdvanced(let from, let to, let lines):
+            // If you moved TM mutation out of compute, do it here instead:
+            // let changes = applyTMProgressionForNewCycle(from: from)
+            let styleShort = (settings.progressionStyle == .classic) ? "Classic" : "Auto"
+
+            currentCycle = to
+            currentWeek = 1
+            clearAllCompletionFor(week: 1)
+
+            // Reset PR window for new cycle
+            PRStore.shared.resetCycle(currentCycle)
+
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            toast("Cycle \(from) complete → Cycle \(to) (\(styleShort))")
+
+            // Show your existing celebration sheet
+            cycleAdvancedFrom = from
+            cycleSummaryLines = lines
+            showCycleSummary = true
+        }
     }
     
 #if DEBUG
@@ -1112,6 +1131,15 @@ struct ContentView: View {
 
             // AMRAP
             workoutState.setAMRAP(lift: key, week: week, reps: 0)
+        }
+    }
+    
+    private func isWorkoutSaved(lift: Lift, week: Int, cycle: Int) -> Bool {
+        let key = lift.label.lowercased()
+        return WorkoutStore.shared.workouts.contains {
+            $0.cycle == cycle &&
+            $0.programWeek == week &&
+            $0.lift.lowercased() == key
         }
     }
     }

@@ -348,10 +348,10 @@ struct SettingsSheet: View {
             Button {
                 // Restore recommended defaults
                 settings.assistSquatID   = "split_squat"
-                settings.assistBenchID   = "triceps_ext"
-                settings.assistDeadliftID = "back_ext"
-                settings.assistRowID     = "spider_curls"
-                settings.assistPressID   = "triceps_ext"
+                settings.assistBenchID   = "close_grip"
+                settings.assistDeadliftID = "barbell_rdl"
+                settings.assistRowID     = "barbell_rdl"
+                settings.assistPressID   = "seated_db_press"
             } label: {
                 Label("Restore Recommended", systemImage: "arrow.counterclockwise")
             }
