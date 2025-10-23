@@ -346,12 +346,12 @@ struct WorkoutRowView: View {
                 Label("\(Int(workout.est1RM)) lb", systemImage: "trophy.fill")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                
+
                 Label("\(workout.totalVolume) lb", systemImage: "chart.bar.fill")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                
-                Label("Week \(workout.programWeek)", systemImage: "calendar")
+
+                Label("C\(workout.cycle) • W\(workout.programWeek)", systemImage: "calendar")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
