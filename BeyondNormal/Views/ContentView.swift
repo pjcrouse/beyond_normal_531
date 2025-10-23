@@ -580,14 +580,19 @@ struct ContentView: View {
     }
     
     private var finishButton: some View {
-        Button {
+        let alreadySaved = isWorkoutSaved(lift: selectedLift, week: currentWeek, cycle: currentCycle)
+
+        return Button {
             finishWorkout()
         } label: {
-            Label("Finish Workout", systemImage: "checkmark.seal.fill")
+            Label(alreadySaved ? "Already Saved" : "Finish Workout",
+                  systemImage: alreadySaved ? "checkmark.seal.fill" : "checkmark.seal.fill")
                 .font(.headline)
         }
         .buttonStyle(.borderedProminent)
-        .accessibilityLabel("Finish workout")
+        .disabled(alreadySaved)
+        .opacity(alreadySaved ? 0.55 : 1.0)
+        .accessibilityLabel(alreadySaved ? "Workout already saved" : "Finish workout")
     }
     
     private var resetButton: some View {
@@ -756,6 +761,12 @@ struct ContentView: View {
     }
     
     private func finishWorkout() {
+        if isWorkoutSaved(lift: selectedLift, week: currentWeek, cycle: currentCycle) {
+            // Optional: give gentle feedback
+            savedAlertText = "This \(selectedLift.label) workout for Week \(currentWeek), Cycle \(currentCycle) is already saved."
+            showSavedAlert = true
+            return
+        }
         let metrics = currentWorkoutMetrics()
         let liftLabel = selectedLift.label
 
@@ -1120,6 +1131,15 @@ struct ContentView: View {
 
             // AMRAP
             workoutState.setAMRAP(lift: key, week: week, reps: 0)
+        }
+    }
+    
+    private func isWorkoutSaved(lift: Lift, week: Int, cycle: Int) -> Bool {
+        let key = lift.label.lowercased()
+        return WorkoutStore.shared.workouts.contains {
+            $0.cycle == cycle &&
+            $0.programWeek == week &&
+            $0.lift.lowercased() == key
         }
     }
     }
