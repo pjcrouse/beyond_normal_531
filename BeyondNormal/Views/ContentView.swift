@@ -230,17 +230,22 @@ struct ContentView: View {
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
                             Button { showHistory = true } label: {
-                                Label("History", systemImage: "clock.arrow.circlepath")
+                                Image(systemName: "clock.arrow.circlepath")
+                                    .symbolRenderingMode(.monochrome)
                             }
-                            .labelStyle(.iconOnly)
                             .tint(Color.brandAccent)
+                            .environment(\.isEnabled, true)
+                            .allowsHitTesting(!showSettings)
                             .accessibilityLabel("History")
                         }
                         ToolbarItem(placement: .topBarLeading) {
                             Button { showDataManagement = true } label: {
-                                Label("Data", systemImage: "externaldrive.fill")
+                                Image(systemName: "externaldrive.fill")
+                                    .symbolRenderingMode(.monochrome)
                             }
                             .tint(Color.brandAccent)
+                            .environment(\.isEnabled, true)
+                            .allowsHitTesting(!showSettings)
                             .accessibilityLabel("Data Management")
                         }
                         
