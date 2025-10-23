@@ -377,6 +377,7 @@ struct ContentView: View {
                 }
                 .onChange(of: selectedLift) { _, new in
                     liveRepsText = repsText(for: new)
+                    workoutNotes = ""
                 }
                 .onChange(of: liveRepsText) { _, _ in
                     saveReps(liveRepsText, for: selectedLift)
@@ -396,6 +397,7 @@ struct ContentView: View {
                 }
                 .onChange(of: currentWeek) { _, _ in
                     liveRepsText = repsText(for: selectedLift)
+                    workoutNotes = ""  
                 }
                 .onReceive(implements.objectWillChange) { _ in weightsVersion &+= 1 }
                 // === collect tour target anchors from inside the NavigationStack ===
