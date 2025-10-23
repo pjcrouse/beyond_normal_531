@@ -59,6 +59,7 @@ struct WorkoutBlock: View {
             warmupLink(tm: tm, scheme: scheme)
             mainSets(tm: tm, scheme: scheme, refreshID: refreshID)
             NotesField(text: $workoutNotes, focused: notesFocused)
+                .id("notes-\(selectedLift.rawValue)-wk\(currentWeek)")
             RestTimerCard(timer: timer, regular: timerRegularSec, bbb: timerBBBsec, startRest: startRest)
             bbbSets(tm: tm, scheme: scheme, refreshID: refreshID)
         }
