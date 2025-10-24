@@ -87,9 +87,43 @@ struct ContentView: View {
     @State private var showPaywall: Bool = false
     
     @EnvironmentObject private var purchases: PurchaseManager
+
+    @State private var showJokerOfferAlert = false
+    @State private var pendingJokerContext: (lift: Lift, reps: Int, week: WeekKind)?
+    
+    // Rendered Joker prescriptions for today (lightweight, display-only)
+    private struct JokerSet: Identifiable, Hashable {
+        let id = UUID()
+        let percentOfTM: Double   // e.g., 0.95
+        let reps: Int             // 3 or 1
+        let weight: Double        // rounded to your settings.roundTo
+        let label: String         // "Joker"
+    }
+
+    @State private var jokerActive = false
+    @State private var jokerSets: [SetPrescription] = []
+    @State private var showJokerFeedback = false  // only for .three after the first triple
     
     private var isUpper: (Lift) -> Bool { { $0 == .bench || $0 == .press || $0 == .row } }
     private var isLower: (Lift) -> Bool { { $0 == .squat || $0 == .deadlift } }
+    
+    private func weekKind(for week: Int) -> WeekKind? {
+        switch week {
+        case 1: return .five
+        case 2: return .three
+        case 3: return .one
+        default: return nil // deload or unsupported
+        }
+    }
+    
+    // dynamic threshold from settings
+    private func jokerTriggerReps(for wk: WeekKind) -> Int {
+        switch wk {
+        case .three: return settings.jokerTrigger3s
+        case .one:   return settings.jokerTrigger1s
+        case .five:  return .max // never triggers Jokers on 5s
+        }
+    }
     
     private var displayNameForAwards: String {
         let name = settings.userDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -277,8 +311,6 @@ struct ContentView: View {
                                 .accessibilityLabel("PRs")
                         }
                     }
-
-                    // ⛔️ Removed the old .overlay(alignment: .top) { ... } toast
                     
                     // === PAYWALL OVERLAY LAST (on top) ===
                     if !purchases.isPro {
@@ -294,6 +326,21 @@ struct ContentView: View {
                     }
                 }
                 .tint(Color.brandAccent)
+                
+                // ⬇️ Mount the rest-timer pill at the very top (outside mainContent)
+                .safeAreaInset(edge: .top) {
+                    RestTimerPill(
+                        timer: timer,
+                        regular: settings.timerRegularSec,
+                        bbb: settings.timerBBBSec,
+                        onStart: { secs in startRest(secs, fromUser: true) },
+                        onPause: { timer.pause() },
+                        onReset: { timer.reset() }
+                    )
+                    .padding(.top, 6)
+                    .padding(.horizontal)
+                }
+                
                 // ✅ New toast as safe-area inset with haptic + auto-dismiss
                 .toastOverlay(showToast: $showToast, toastText: $toastText)
                 
@@ -355,6 +402,14 @@ struct ContentView: View {
                     }
                 } message: { text in
                     Text(text)
+                }
+                .alert("Wow, you must feel great today!", isPresented: $showJokerOfferAlert, presenting: pendingJokerContext) { ctx in
+                    Button("Add Joker Sets") {
+                        startJokers(with: ctx)     // ⬅️ implemented below
+                    }
+                    Button("Not today", role: .cancel) { }
+                } message: { _ in
+                    Text("Enable Joker sets and push the envelope?")
                 }
                 .safeAreaInset(edge: .bottom) {
                     if notesFocused || amrapFocused {
@@ -484,7 +539,7 @@ struct ContentView: View {
                 currentCycle: currentCycle
             )
             
-            WorkoutBlock(
+            MainSetsBlock(
                 selectedLift: $selectedLift,
                 currentWeek: $currentWeek,
                 workoutNotes: $workoutNotes,
@@ -504,10 +559,8 @@ struct ContentView: View {
                         weight: w,
                         reps: reps,
                         formula: settings.oneRMFormula,
-                        softWarnAt: 11,
-                        hardCap: 15,
-                        refuseAboveHardCap: true, // or false to cap instead of refuse
-                        roundTo: roundTo
+                        softWarnAt: 11, hardCap: 15,
+                        refuseAboveHardCap: true, roundTo: roundTo
                     )
                 },
                 setBinding: setBinding,
@@ -520,11 +573,45 @@ struct ContentView: View {
                 currentFormula: settings.oneRMFormula,
                 availableLifts: activeLifts,
                 currentCycle: currentCycle,
-                startRest: { secs, fromUser in
-                    startRest(secs, fromUser: fromUser)
-                }
+                startRest: { secs, fromUser in startRest(secs, fromUser: fromUser) }
             )
             .id(weightsVersion)
+            
+            // ⬇️ Add this block right AFTER WorkoutBlock(...).id(weightsVersion)
+            if jokerActive {
+                JokerSectionView(
+                    jokerSets: jokerSets,
+                    showFeedback: showJokerFeedback,
+                    onFire: {
+                        // fire → add 100% TM triple and hide feedback
+                        if let ctx = pendingJokerContext { jokerFeedbackFire(lift: ctx.lift) }
+                    },
+                    onDumpster: {
+                        // dumpster → hide feedback
+                        jokerFeedbackDumpster()
+                    }
+                )
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .padding(.horizontal)
+            }
+            
+            // ⬇️ ADD BBB AS ITS OWN BLOCK, before notes/assistance
+            BBBBlock(
+                selectedLift: $selectedLift,
+                currentWeek: currentWeek,
+                program: program,
+                workoutState: workoutState,
+                calculator: calculator,
+                bbbPct: bbbPct,
+                tmFor: { lift in tmFor(lift) },
+                roundTo: roundTo,
+                barWeightForSelectedLift: barWeightForSelectedLift,
+                timer: timer,
+                timerBBBsec: timerBBBsec,
+                allowTimerStarts: allowTimerStarts,
+                armTimers: armTimers,
+                startRest: { secs, fromUser in startRest(secs, fromUser: fromUser) }
+            )
             
             AssistanceBlock(
                 selectedLift: $selectedLift,
@@ -560,10 +647,28 @@ struct ContentView: View {
             )
             .id(weightsVersion)
             
+            // Note Block
+            WorkoutNotesBlock(text: $workoutNotes)
+            
+            // Summary block
+            
+            // Compute Joker volume right above the SummaryCard call
+            let jokerVol = Int(jokerSets.reduce(0.0) { $0 + ($1.weight * Double($1.reps)) })
+            let prNow = prAchievedThisSession(est: m.est)
+            
+
             SummaryCard(
-                date: .now,
+                date: workoutEndDate ?? .now,
                 est1RM: m.est,
-                totals: (total: m.totalVol, main: m.mainVol, bbb: m.bbbVol, assist: m.assistVol)
+                totals: (
+                    total: m.totalVol,
+                    main:  m.mainVol,
+                    bbb:   m.bbbVol,
+                    assist:m.assistVol
+                ),
+                focusLift: selectedLift.label,
+                joker: jokerVol,              // <-- separate param (not in totals)
+                prAchieved: prNow             // <-- computed helper
             )
             .cardStyle()
             
@@ -578,6 +683,91 @@ struct ContentView: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(.vertical)
+    }
+    
+    // Simple “did we beat the best est-1RM this cycle for this lift?” check
+    private func prAchievedThisSession(est: Double) -> Bool {
+        guard est > 0 else { return false }
+        // If you track best PRs differently, swap this lookup.
+        let best = PRStore.shared.bestByCycle[PRKey(cycle: currentCycle, lift: selectedLift.label)] ?? 0
+        return Int(est.rounded()) > best
+    }
+    
+    private func startJokers(with ctx: (lift: Lift, reps: Int, week: WeekKind)) {
+        let tm = tmFor(ctx.lift)
+        // Generate the full plan, but show only the first set now.
+        let sets = JokerSetGenerator.generate(
+            trainingMax: tm,
+            week: ctx.week,
+            params: jokerParamsFromSettings
+        )
+
+        if let first = sets.first {
+            jokerSets = [first]
+            jokerActive = true
+            showJokerFeedback = true     // user taps 🔥 to add more
+            toast("Joker Sets Activated")
+        } else {
+            // No sets possible (e.g., week .five)
+            jokerActive = false
+            showJokerFeedback = false
+        }
+    }
+    
+    private func jokerFeedbackFire(lift: Lift) {
+        guard let ctx = pendingJokerContext else { showJokerFeedback = false; return }
+        let tm = tmFor(ctx.lift)
+
+        if let next = JokerSetGenerator.next(
+            trainingMax: tm,
+            week: ctx.week,
+            params: jokerParamsFromSettings,
+            after: jokerSets
+        ) {
+            jokerSets.append(next)
+            // 🔔 Fire implies completing the previous Joker set — start MAIN rest
+            if !allowTimerStarts { armTimers() }
+            startRest(timerRegularSec, fromUser: true)
+            // If there is no further next, hide feedback now.
+            if JokerSetGenerator.next(trainingMax: tm, week: ctx.week, params: jokerParamsFromSettings, after: jokerSets) == nil {
+                showJokerFeedback = false
+            }
+        } else {
+            showJokerFeedback = false
+        }
+    }
+
+    private func jokerFeedbackDumpster() {
+        showJokerFeedback = false
+        // 🗑️ Treat as completion too → MAIN rest
+        if !allowTimerStarts { armTimers() }
+        startRest(timerRegularSec, fromUser: true)
+    }
+
+    private func addJokerTriple(tm: Double, percentOfTM: Double) {
+        let w = calculator.round(tm * percentOfTM)
+        jokerSets.append(
+            SetPrescription(
+                kind: .joker,                      // ✅ required parameter
+                percentOfTM: percentOfTM,
+                reps: 3,
+                weight: w,
+                label: "Joker"
+            )
+        )
+    }
+
+    private func addJokerSingle(tm: Double, percentOfTM: Double) {
+        let w = calculator.round(tm * percentOfTM)
+        jokerSets.append(
+            SetPrescription(
+                kind: .joker,                      // ✅ required parameter
+                percentOfTM: percentOfTM,
+                reps: 1,
+                weight: w,
+                label: "Joker"
+            )
+        )
     }
     
     // MARK: - Subviews
@@ -734,6 +924,39 @@ struct ContentView: View {
     private func saveReps(_ text: String, for lift: Lift) {
         let r = Int(text) ?? 0
         workoutState.setAMRAP(lift: lift.rawValue, week: currentWeek, reps: r)
+        evaluateAmrapTrigger(reps: r, lift: lift)
+    }
+    
+    private func evaluateAmrapTrigger(reps: Int, lift: Lift) {
+        // Respect global setting
+        guard settings.jokerSetsEnabled else { return }
+        // ⛔️ If Jokers are already active, never prompt again
+        guard !jokerActive else { return }
+        // Only main weeks 1..3
+        guard let wk = weekKind(for: currentWeek) else { return }
+
+        switch wk {
+        case .three, .one:
+            // Use configurable thresholds
+            let threshold = jokerTriggerReps(for: wk)
+            guard reps >= threshold else { return }
+            pendingJokerContext = (lift: lift, reps: reps, week: wk)
+            showJokerOfferAlert = true
+
+        case .five:
+            // No Jokers; gentle coaching nudge only
+            toast("Big AMRAP! On 5s week we keep it submax. Plan a TM bump next cycle (+10 lower / +5 upper).")
+        }
+    }
+    
+    private var jokerParamsFromSettings: JokerParams {
+        JokerParams(
+            tripleStepPct: settings.jokerTripleStepPct,   // still stored, though 3s uses fixed 5%-steps in your UI plan
+            singleStepPct: settings.jokerSingleStepPct,   // same note
+            maxOverTMPct: settings.jokerMaxOverTMPct,     // 0.05 / 0.10 / 0.15 / 0.20
+            allowSecondTriple: true,                      // not used by the feedback flow, harmless
+            roundTo: settings.roundTo
+        )
     }
     
     private func currentWorkoutMetrics() -> (est: Double, totalVol: Int, mainVol: Int, bbbVol: Int, assistVol: Int) {
@@ -772,7 +995,12 @@ struct ContentView: View {
             }
         }
         
-        let totalVol = Int(mainVol) + Int(bbbVol) + Int(assistVol)
+        // NEW: Joker volume (from the UI-rendered jokerSets for this workout)
+        let jokerVol = jokerSets.reduce(0.0) { acc, s in
+            acc + (s.weight * Double(s.reps))
+        }
+        
+        let totalVol = Int(mainVol) + Int(bbbVol) + Int(assistVol) + Int(jokerVol)
         
         let top = currentScheme.main[2]
         let est: Double = {
@@ -795,6 +1023,8 @@ struct ContentView: View {
         return (est, totalVol, Int(mainVol), Int(bbbVol), Int(assistVol))
     }
     
+    @State private var workoutEndDate: Date? = nil
+    
     private func finishWorkout() {
         if isWorkoutSaved(lift: selectedLift, week: currentWeek, cycle: currentCycle) {
             // Optional: give gentle feedback
@@ -802,6 +1032,7 @@ struct ContentView: View {
             showSavedAlert = true
             return
         }
+        workoutEndDate = Date()
         let metrics = currentWorkoutMetrics()
         let liftLabel = selectedLift.label
 

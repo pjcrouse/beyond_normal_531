@@ -73,6 +73,15 @@ final class ProgramSettings: ObservableObject {
 
     @AppStorage(Key.autoAdvanceWeek)   private var autoAdvanceWeekRaw: Bool = true
     @AppStorage(Key.currentCycle)      private var currentCycleRaw: Int = 1
+    
+    // 🔧 Joker configuration (global)
+    @AppStorage("jokerSetsEnabled") var jokerSetsEnabled: Bool = true
+    @AppStorage("jokerAmrapRepCap") var jokerAmrapRepCap: Int = 12
+    @AppStorage("jokerTripleStepPct") var jokerTripleStepPct: Double = 0.05  // 5% jumps for 3s
+    @AppStorage("jokerSingleStepPct") var jokerSingleStepPct: Double = 0.10  // 10% jumps for 1s
+    @AppStorage("jokerMaxOverTMPct")  var jokerMaxOverTMPct: Double  = 0.10  // cap at +10% over TM
+    @AppStorage("jokerTrigger3s") var jokerTrigger3s: Int = 6  // Week 2 (3s): prompt at ≥6
+    @AppStorage("jokerTrigger1s") var jokerTrigger1s: Int = 2  // Week 3 (1s): prompt at ≥2
 
     // MARK: - App-facing (Published)
     @Published var userDisplayName: String = ""
