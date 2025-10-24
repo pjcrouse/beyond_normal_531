@@ -18,6 +18,15 @@ final class WorkoutStateManager: ObservableObject {
             self?.loadCompletedLifts()
         }
     }
+    
+    func isWorkoutComplete(lift: Lift, week: Int) -> Bool {
+        // A workout is “complete” if all main sets are done and AMRAP reps recorded
+        let allSetsComplete = (1...3).allSatisfy {
+            getSetComplete(lift: lift.rawValue, week: week, set: $0)
+        }
+        let amrap = getAMRAP(lift: lift.rawValue, week: week)
+        return allSetsComplete && amrap > 0
+    }
 
     private func loadState() {
         guard let json = UserDefaults.standard.string(forKey: stateKey),

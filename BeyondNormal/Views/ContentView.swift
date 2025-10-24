@@ -230,17 +230,22 @@ struct ContentView: View {
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
                             Button { showHistory = true } label: {
-                                Label("History", systemImage: "clock.arrow.circlepath")
+                                Image(systemName: "clock.arrow.circlepath")
+                                    .symbolRenderingMode(.monochrome)
                             }
-                            .labelStyle(.iconOnly)
                             .tint(Color.brandAccent)
+                            .environment(\.isEnabled, true)
+                            .allowsHitTesting(!showSettings)
                             .accessibilityLabel("History")
                         }
                         ToolbarItem(placement: .topBarLeading) {
                             Button { showDataManagement = true } label: {
-                                Label("Data", systemImage: "externaldrive.fill")
+                                Image(systemName: "externaldrive.fill")
+                                    .symbolRenderingMode(.monochrome)
                             }
                             .tint(Color.brandAccent)
+                            .environment(\.isEnabled, true)
+                            .allowsHitTesting(!showSettings)
                             .accessibilityLabel("Data Management")
                         }
                         
@@ -821,7 +826,8 @@ struct ContentView: View {
             amrapReps: workoutState.getAMRAP(lift: selectedLift.rawValue, week: currentWeek),
             notes: workoutNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : workoutNotes,
             programWeek: currentWeek,
-            cycle: currentCycle
+            cycle: currentCycle,
+            configKey: "\(settings.workoutsPerWeek)-\(settings.fourthLiftRaw)"
         )
 
         // Persist
@@ -1170,10 +1176,12 @@ struct ContentView: View {
     
     private func isWorkoutSaved(lift: Lift, week: Int, cycle: Int) -> Bool {
         let key = lift.label.lowercased()
+        let currentConfig = "\(settings.workoutsPerWeek)-\(settings.fourthLiftRaw)"
         return WorkoutStore.shared.workouts.contains {
             $0.cycle == cycle &&
             $0.programWeek == week &&
-            $0.lift.lowercased() == key
+            $0.lift.lowercased() == key &&
+            $0.configKey == currentConfig
         }
     }
     }

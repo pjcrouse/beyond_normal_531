@@ -9,6 +9,7 @@ struct WorkoutEntry: Identifiable, Codable {
     let bbbPct: Double
     let amrapReps: Int
     let notes: String?
+    let configKey: String
 
     // NEW: program tracking
     let programWeek: Int
@@ -24,7 +25,8 @@ struct WorkoutEntry: Identifiable, Codable {
         amrapReps: Int,
         notes: String?,
         programWeek: Int,
-        cycle: Int
+        cycle: Int,
+        configKey: String
     ) {
         self.id = id
         self.date = date
@@ -36,5 +38,6 @@ struct WorkoutEntry: Identifiable, Codable {
         self.notes = notes
         self.programWeek = programWeek
         self.cycle = cycle
+        self.configKey = configKey 
     }
 }
