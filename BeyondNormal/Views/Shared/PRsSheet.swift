@@ -61,7 +61,7 @@ struct PRsSheet: View {
                             TrophyRoomView()
                         } label: {
                             Label("Open Trophy Room", systemImage: "trophy")
-                                .foregroundStyle(.yellow)
+                                .foregroundColor(.brandAccent)
                         }
                         .accessibilityLabel("Open Trophy Room")
                     }

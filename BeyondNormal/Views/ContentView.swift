@@ -9,6 +9,7 @@ extension UIApplication {
         sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 }
+
 // MARK: - Main View
 
 struct ContentView: View {
@@ -32,8 +33,8 @@ struct ContentView: View {
     // Configurable workouts per week support (now sourced from ProgramSettings)
     private var workoutsPerWeek: Int { settings.workoutsPerWeek }   // 3, 4, or 5
     private var fourthLift: Lift {
-            settings.fourthLiftRaw.lowercased() == "press" ? .press : .row
-        }
+        settings.fourthLiftRaw.lowercased() == "press" ? .press : .row
+    }
     
     // Fix for cycle/week
     @AppStorage("current_cycle") private var currentCycle: Int = 1
@@ -68,10 +69,6 @@ struct ContentView: View {
     @State private var prService = PRService()
     @StateObject private var awardStore = AwardStore()
     
-    // If you already store the user’s display name somewhere, use that.
-    // For now, a placeholder:
-    @AppStorage("user_display_name") private var userDisplayName: String = ""
-    
     // Workout/cycle completion
     @State private var toastText: String?
     @State private var showToast: Bool = false
@@ -93,6 +90,11 @@ struct ContentView: View {
     
     private var isUpper: (Lift) -> Bool { { $0 == .bench || $0 == .press || $0 == .row } }
     private var isLower: (Lift) -> Bool { { $0 == .squat || $0 == .deadlift } }
+    
+    private var displayNameForAwards: String {
+        let name = settings.userDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? "You" : name
+    }
     
     // Bump rules for Classic
     private func classicBumpAmount(for lift: Lift) -> Double {
@@ -275,19 +277,9 @@ struct ContentView: View {
                                 .accessibilityLabel("PRs")
                         }
                     }
-                    .overlay(alignment: .top) {
-                        if showToast, let text = toastText {
-                            Toast(text: text)
-                                .transition(.move(edge: .top).combined(with: .opacity))
-                                .onAppear {
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                                        withAnimation { showToast = false }
-                                    }
-                                }
-                                .padding(.top, 8)
-                                .padding(.horizontal)
-                        }
-                    }
+
+                    // ⛔️ Removed the old .overlay(alignment: .top) { ... } toast
+                    
                     // === PAYWALL OVERLAY LAST (on top) ===
                     if !purchases.isPro {
                         Color.black.opacity(0.4).ignoresSafeArea()  // dimmer
@@ -299,12 +291,16 @@ struct ContentView: View {
                                 .padding()
                         }
                         .transition(.opacity)
-                    }                }
+                    }
+                }
                 .tint(Color.brandAccent)
+                // ✅ New toast as safe-area inset with haptic + auto-dismiss
+                .toastOverlay(showToast: $showToast, toastText: $toastText)
+                
                 .sheet(isPresented: $showSettings) {
                     SettingsSheet()
                         .environmentObject(settings)
-                        .environmentObject(tour)  
+                        .environmentObject(tour)
                         .presentationDetents([.medium, .large])
                 }
                 .sheet(isPresented: $showHistory) {
@@ -429,7 +425,7 @@ struct ContentView: View {
                 }
                 .onChange(of: currentWeek) { _, _ in
                     liveRepsText = repsText(for: selectedLift)
-                    workoutNotes = ""  
+                    workoutNotes = ""
                 }
                 .onReceive(implements.objectWillChange) { _ in weightsVersion &+= 1 }
                 // === collect tour target anchors from inside the NavigationStack ===
@@ -854,11 +850,12 @@ struct ContentView: View {
                 date: entry.date
            ) {
             savedAlertText += "\n\n🏆 New PR: \(Int(round(newPR.value))) lb \(lt.rawValue.capitalized)"
+            
             // Award generation (async)
             Task { @MainActor in
                 await AwardGenerator.shared.createAndStoreAward(
                     for: newPR,
-                    userDisplayName: userDisplayName.isEmpty ? "You" : userDisplayName,
+                    userDisplayName: displayNameForAwards,
                     store: awardStore
                 )
             }
@@ -871,33 +868,33 @@ struct ContentView: View {
         showSavedAlert = true
     }
         
-        // ... rest of the method stays the same ...
+    // ... rest of the method stays the same ...
         
-        private func requestNotifsIfNeeded() {
-            let center = UNUserNotificationCenter.current()
-            center.getNotificationSettings { s in
-                if s.authorizationStatus == .notDetermined {
-                    center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
-                }
+    private func requestNotifsIfNeeded() {
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { s in
+            if s.authorizationStatus == .notDetermined {
+                center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
             }
         }
+    }
         
-        private func tmChangeLine(_ name: String, _ old: Double, _ new: Double) -> String {
-            let d = Int(new.rounded()) - Int(old.rounded())
-            let arrow = d >= 0 ? "↑" : "↓"
-            return "\(name): \(Int(old.rounded())) → \(Int(new.rounded())) \(arrow)\(abs(d))"
-        }
+    private func tmChangeLine(_ name: String, _ old: Double, _ new: Double) -> String {
+        let d = Int(new.rounded()) - Int(old.rounded())
+        let arrow = d >= 0 ? "↑" : "↓"
+        return "\(name): \(Int(old.rounded())) → \(Int(new.rounded())) \(arrow)\(abs(d))"
+    }
         
-        private func startRest(_ seconds: Int, fromUser: Bool) {
-            // Only arm on user action
-            if fromUser {
-                armTimers() // sets allowTimerStarts = true and timer.allowStarts = true
-            }
-            // Never start unless both gates are open
-            guard allowTimerStarts, timer.allowStarts else { return }
-            timer.start(seconds: seconds)
+    private func startRest(_ seconds: Int, fromUser: Bool) {
+        // Only arm on user action
+        if fromUser {
+            armTimers() // sets allowTimerStarts = true and timer.allowStarts = true
         }
-
+        // Never start unless both gates are open
+        guard allowTimerStarts, timer.allowStarts else { return }
+        timer.start(seconds: seconds)
+    }
+    
     // MARK: - Auto-advance helpers (history-derived)
 
     // Week is complete when there's a saved entry for every active main lift in that week.
@@ -978,76 +975,50 @@ struct ContentView: View {
     }
     
 #if DEBUG
-        /// Auto-fills ONLY the current workout (selectedLift @ currentWeek).
-        private func debugAutofillCurrentWorkout() {
-            let lift = selectedLift
-            let liftKey = lift.rawValue
-            let week = currentWeek
-            let scheme = program.weekScheme(for: week)
-            let tmSel = tmFor(lift)
-            
-            // --- Main sets (1..3) ---
-            for setNum in 1...3 {
-                workoutState.setSetComplete(lift: liftKey, week: week, set: setNum, value: true)
-            }
-            
-            // --- AMRAP reps if this week has AMRAP ---
-            if scheme.main.indices.contains(2), scheme.main[2].amrap {
-                let reps = Int.random(in: 5...15)
-                workoutState.setAMRAP(lift: liftKey, week: week, reps: reps)
-                // keep the on-screen text in sync
-                liveRepsText = String(reps)
-            } else {
-                // deload / no AMRAP
-                workoutState.setAMRAP(lift: liftKey, week: week, reps: 0)
-                liveRepsText = ""
-            }
-            
-            // --- BBB & Assistance only on non-deload weeks ---
-            if scheme.showBBB {
-                // BBB sets are tracked as main set indices 4..8; per BBB UI they’re 1..5
-                let defaultBBBW = calculator.round(tmSel * bbbPct)
-                
-                for b in 1...5 {
-                    workoutState.setSetComplete(lift: liftKey, week: week, set: b + 3, value: true)
-                    workoutState.setBBBWeight(lift: liftKey, week: week, set: b, weight: defaultBBBW)
-                    workoutState.setBBBReps(lift: liftKey, week: week, set: b, reps: 10)
-                }
-                
-                // Assistance 1..3 → mark complete; weight/reps fall back to defaults
-                for a in 1...3 {
-                    workoutState.setAssistComplete(lift: liftKey, week: week, set: a, value: true)
-                }
-            }
+    /// Auto-fills ONLY the current workout (selectedLift @ currentWeek).
+    private func debugAutofillCurrentWorkout() {
+        let lift = selectedLift
+        let liftKey = lift.rawValue
+        let week = currentWeek
+        let scheme = program.weekScheme(for: week)
+        let tmSel = tmFor(lift)
+        
+        // --- Main sets (1..3) ---
+        for setNum in 1...3 {
+            workoutState.setSetComplete(lift: liftKey, week: week, set: setNum, value: true)
         }
-#endif
-    
-    private struct Toast: View {
-        let text: String
-
-        var body: some View {
-            let brand = Color(hex: "E55722")  // Your specific orange
-
-            HStack(spacing: 8) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(brand)
-                
-                Text(text)
-                    .font(.callout.weight(.semibold))
-                    .lineLimit(2)
-                    .foregroundStyle(brand)
+        
+        // --- AMRAP reps if this week has AMRAP ---
+        if scheme.main.indices.contains(2), scheme.main[2].amrap {
+            let reps = Int.random(in: 5...15)
+            workoutState.setAMRAP(lift: liftKey, week: week, reps: reps)
+            // keep the on-screen text in sync
+            liveRepsText = String(reps)
+        } else {
+            // deload / no AMRAP
+            workoutState.setAMRAP(lift: liftKey, week: week, reps: 0)
+            liveRepsText = ""
+        }
+        
+        // --- BBB & Assistance only on non-deload weeks ---
+        if scheme.showBBB {
+            // BBB sets are tracked as main set indices 4..8; per BBB UI they’re 1..5
+            let defaultBBBW = calculator.round(tmSel * bbbPct)
+            
+            for b in 1...5 {
+                workoutState.setSetComplete(lift: liftKey, week: week, set: b + 3, value: true)
+                workoutState.setBBBWeight(lift: liftKey, week: week, set: b, weight: defaultBBBW)
+                workoutState.setBBBReps(lift: liftKey, week: week, set: b, reps: 10)
             }
-            .padding(.vertical, 10)
-            .padding(.horizontal, 14)
-            .background(
-                Color.black.opacity(0.18),
-                in: Capsule()
-            )
-            .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
-            .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
+            
+            // Assistance 1..3 → mark complete; weight/reps fall back to defaults
+            for a in 1...3 {
+                workoutState.setAssistComplete(lift: liftKey, week: week, set: a, value: true)
+            }
         }
     }
-
+#endif
+    
     private func toast(_ s: String) {
         toastText = s
         withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
@@ -1184,4 +1155,60 @@ struct ContentView: View {
             $0.configKey == currentConfig
         }
     }
+}
+
+// MARK: - Toast UI (file-scope)
+
+private struct Toast: View {
+    let text: String
+
+    var body: some View {
+        let brand = Color.brandAccent            // your orange
+        let textOnBrand = Color(hex: "#FAFAF0")  // off-white you wanted
+
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill")
+            Text(text)
+                .font(.headline.weight(.semibold))
+                .lineLimit(2)
+        }
+        .foregroundStyle(textOnBrand)                      // icon + text color
+        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
+        .background(brand, in: Capsule())                  // solid brand bg
+        .shadow(color: brand.opacity(0.4), radius: 10, y: 4)
     }
+}
+
+private struct ToastModifier: ViewModifier {
+    @Binding var showToast: Bool
+    @Binding var toastText: String?
+
+    func body(content: Content) -> some View {
+        content.safeAreaInset(edge: .top) {
+            if showToast, let text = toastText {
+                Toast(text: text)
+                    .padding(.top, 12)
+                    .padding(.horizontal)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .onAppear {
+                        // Success haptic
+                        let generator = UINotificationFeedbackGenerator()
+                        generator.notificationOccurred(.success)
+
+                        // Auto-dismiss after 3s
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                            withAnimation { showToast = false }
+                        }
+                    }
+                    .zIndex(5)
+            }
+        }
+    }
+}
+
+extension View {
+    func toastOverlay(showToast: Binding<Bool>, toastText: Binding<String?>) -> some View {
+        modifier(ToastModifier(showToast: showToast, toastText: toastText))
+    }
+}

@@ -143,7 +143,7 @@ public struct AMRAPRow: View {
                                 }
                             }
                             FormulaTag(formula: currentFormula)
-                                .foregroundStyle(.blue)
+                                .foregroundColor(.brandAccent)
                         }
                         if let note = capNote, !note.isEmpty {
                             Text(note)
