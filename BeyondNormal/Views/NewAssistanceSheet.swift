@@ -5,6 +5,11 @@ struct NewAssistanceSheet: View {
     @ObservedObject var library: AssistanceLibrary
     let preselectedCategory: ExerciseCategory?   // pass from caller when you know it
 
+    @EnvironmentObject private var settings: ProgramSettings
+
+    // keeps last-used creator between launches (optional, keep as-is)
+    @AppStorage("creatorDisplayName") private var authorName: String = ""
+    
     // explicit init so Swift is happy with @ObservedObject + defaulted arg
     init(library: AssistanceLibrary, preselectedCategory: ExerciseCategory? = nil) {
         self._library = ObservedObject(wrappedValue: library)
@@ -20,14 +25,13 @@ struct NewAssistanceSheet: View {
     @State private var equipment: EquipmentKind = .bodyweight
     @State private var barWeightText: String = "45"   // default shown only if barbell
 
-    @AppStorage("creatorDisplayName") private var authorName: String = ""
-
     var body: some View {
         NavigationStack {
             Form {
                 Section("Creator") {
                     TextField("Your name (optional)", text: $authorName)
                         .textInputAutocapitalization(.words)
+                        .disableAutocorrection(true)
                 }
 
                 Section("Exercise Info") {
@@ -78,6 +82,10 @@ struct NewAssistanceSheet: View {
             }
             .onAppear {
                 if let c = preselectedCategory { category = c }
+                // ⬇️ seed from Settings only if empty
+                if authorName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    authorName = settings.userDisplayName
+                }
             }
             .navigationTitle("New Assistance Exercise")
             .toolbar {

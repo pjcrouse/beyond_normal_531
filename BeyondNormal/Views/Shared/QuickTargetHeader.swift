@@ -13,7 +13,7 @@ struct QuickTargetHeader: View {
                 .font(.headline)
             Text("\(topLine) → \(fmt(topWeight)) lb")
                 .font(.title3.weight(.bold))
-                .foregroundStyle(.blue)
+                .foregroundColor(.brandAccent)
         }
         .padding(.top, 6)
     }
