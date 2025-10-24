@@ -14,6 +14,7 @@ public struct LoadRounder {
 
 /// Stateless utility to compute per-side plates for a target barbell weight.
 public final class PlateCalculator {
+    public var availablePlates: [Double] { inventory }
     private let barWeight: Double
     private let roundTo: Double
     private let inventory: [Double]
