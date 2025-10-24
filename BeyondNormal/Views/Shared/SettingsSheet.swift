@@ -5,14 +5,14 @@ struct SettingsSheet: View {
     @EnvironmentObject var tour: TourController
     @State private var sheetTargets: [TourTargetID: Anchor<CGRect>] = [:]
     @Environment(\.dismiss) private var dismiss
-    
+
     // 👇 Define Field BEFORE using it anywhere
     enum Field {
         case squat, bench, deadlift, row, press, barWeight, roundTo, timerRegular, timerBBB
     }
-    
+
     @FocusState private var focusedField: Field?
-    
+
     // Temp strings for numeric TextFields (to avoid fighting the keyboard)
     @State private var tmpSquat = ""
     @State private var tmpBench = ""
@@ -23,10 +23,10 @@ struct SettingsSheet: View {
     @State private var tmpRoundTo = ""
     @State private var tmpTimerRegular = ""
     @State private var tmpTimerBBB = ""
-    
+
     // Tour advance helper state
     @State private var tmAdvanceArmed = false
-    
+
     // 👇 Helpers can now refer to Field safely
     private func isTMField(_ f: Field?) -> Bool {
         guard let f = f else { return false }
@@ -35,7 +35,7 @@ struct SettingsSheet: View {
         default: return false
         }
     }
-    
+
     private func nextTMField(after f: Field) -> Field? {
         switch f {
         case .squat:   return .bench
@@ -46,7 +46,7 @@ struct SettingsSheet: View {
         default:       return nil
         }
     }
-    
+
     var body: some View {
         GeometryReader { proxy in
             ZStack {
@@ -60,6 +60,10 @@ struct SettingsSheet: View {
                             loadingSection
                             bbbSection
                             restTimerSection
+
+                            // 🔥 Joker settings live INSIDE the form like everything else
+                            jokerSettingsSection
+
                             oneRMSection
                             tmProgressionSection
                             assistanceSection
@@ -104,7 +108,7 @@ struct SettingsSheet: View {
                         }
                     }
                     .onAppear(perform: onAppearSetup)
-                    
+
                     // AMRAP-style bottom Done bar (bright; we'll cut a hole for it in the overlay)
                     .safeAreaInset(edge: .bottom) {
                         if focusedField != nil {
@@ -127,7 +131,7 @@ struct SettingsSheet: View {
                         }
                     }
                     .animation(.easeInOut, value: focusedField != nil)
-                    
+
                     // Collect tour targets inside THIS sheet
                     .overlayPreferenceValue(TourTargetsPreferenceKey.self) { value in
                         Color.clear
@@ -135,22 +139,20 @@ struct SettingsSheet: View {
                             .onChange(of: value) { _, newValue in sheetTargets = newValue }
                     }
                 } // END NavigationStack
-                
+
                 // === TOUR OVERLAY (shows for sheet steps) ===
                 if tour.isActive,
                    let target = tour.currentTarget,
                    target == .displayName || target == .trainingMaxes {
-                    // If you added the bottom-hole param in the overlay, pass it here to keep Done bright:
-                    // GearTourOverlay(targets: sheetTargets, proxy: proxy, excludeBottomHeight: (focusedField != nil ? 96 : 0))
                     GearTourOverlay(targets: sheetTargets, proxy: proxy)
                         .environmentObject(tour)
                 }
             } // END ZStack
         } // END GeometryReader
     }
-    
+
     // MARK: - Sections
-    
+
     private var profileSection: some View {
         Section("Profile") {
             HStack {
@@ -168,13 +170,13 @@ struct SettingsSheet: View {
             }
             .id("profileDisplayName")              // 👈 scroll anchor
             .tourTarget(id: .displayName)          // 👈 highlight this row
-            
+
             Text("Your name appears on PR award medals. Leave blank to use default.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
     }
-    
+
     private var trainingMaxesSection: some View {
         Section("Training Maxes (lb)") {
             numField("Squat", value: $tmpSquat, field: .squat)
@@ -186,7 +188,7 @@ struct SettingsSheet: View {
         .id("trainingMaxes")
         .tourTarget(id: .trainingMaxes)
     }
-    
+
     private var workoutsPerWeekSection: some View {
         Section("Workouts per Week") {
             Picker("Count", selection: $settings.workoutsPerWeek) {
@@ -195,14 +197,14 @@ struct SettingsSheet: View {
                 Text("5 days").tag(5)
             }
             .pickerStyle(.segmented)
-            
+
             if settings.workoutsPerWeek == 4 {
                 Picker("4th Workout", selection: $settings.fourthLiftRaw) {
                     Text("Row").tag("row")
                     Text("Press").tag("press")
                 }
                 .pickerStyle(.segmented)
-                
+
                 Text("If 4 days: choose Row or Standing Press for Day 4.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -217,7 +219,7 @@ struct SettingsSheet: View {
             }
         }
     }
-    
+
     private var loadingSection: some View {
         Section("Loading") {
             numField("Default Bar Weight (lb)", value: $tmpBarWeight, field: .barWeight)
@@ -227,7 +229,7 @@ struct SettingsSheet: View {
                 .foregroundStyle(.secondary)
         }
     }
-    
+
     private var bbbSection: some View {
         Section("Assistance (BBB)") {
             HStack {
@@ -238,7 +240,7 @@ struct SettingsSheet: View {
             Slider(value: $settings.bbbPercent, in: 0.50...0.70, step: 0.05)
         }
     }
-    
+
     private var restTimerSection: some View {
         Section("Rest Timer (seconds)") {
             HStack {
@@ -268,7 +270,34 @@ struct SettingsSheet: View {
                 .foregroundStyle(.secondary)
         }
     }
-    
+
+    // MARK: Joker settings section (inside form)
+    private var jokerSettingsSection: some View {
+        Section("Joker Sets") {
+            Toggle("Enable Joker Sets (for strong days)", isOn: $settings.jokerSetsEnabled)
+
+            Stepper(
+                "Trigger on 3s week at ≥ \(settings.jokerTrigger3s) reps",
+                value: $settings.jokerTrigger3s,
+                in: 4...10
+            )
+            Stepper(
+                "Trigger on 1s week at ≥ \(settings.jokerTrigger1s) reps",
+                value: $settings.jokerTrigger1s,
+                in: 1...4
+            )
+
+            Text("Recommended: 3s ≥ 6 reps, 1s ≥ 2 reps.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            NavigationLink("Advanced") {
+                JokerAdvancedSettingsView()
+                    .environmentObject(settings)
+            }
+        }
+    }
+
     private var oneRMSection: some View {
         Section(header: Text("1RM Formula")) {
             Picker("Estimation Formula", selection: $settings.oneRMFormula) {
@@ -277,7 +306,7 @@ struct SettingsSheet: View {
                 }
             }
             .pickerStyle(.segmented)
-            
+
             Text("Epley = simple/standard • Brzycki = conservative at high reps • Mayhew = research-based sigmoid")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -347,11 +376,11 @@ struct SettingsSheet: View {
 
             Button {
                 // Restore recommended defaults
-                settings.assistSquatID   = "split_squat"
-                settings.assistBenchID   = "close_grip"
+                settings.assistSquatID    = "split_squat"
+                settings.assistBenchID    = "close_grip"
                 settings.assistDeadliftID = "barbell_rdl"
-                settings.assistRowID     = "barbell_rdl"
-                settings.assistPressID   = "seated_db_press"
+                settings.assistRowID      = "barbell_rdl"
+                settings.assistPressID    = "seated_db_press"
             } label: {
                 Label("Restore Recommended", systemImage: "arrow.counterclockwise")
             }
@@ -478,7 +507,7 @@ struct SettingsSheet: View {
         if let v = Int(tmpTimerBBB)      { settings.timerBBBSec     = max(1, v) }
         dismiss()
     }
-    
+
     private func handleDoneButton() {
         let wasTM = isTMField(focusedField)
         focusedField = nil
@@ -506,3 +535,52 @@ struct SettingsSheet: View {
     }
 }
 
+// MARK: - Subpage for Advanced Joker Settings
+private struct JokerAdvancedSettingsView: View {
+    @EnvironmentObject private var settings: ProgramSettings
+
+    var body: some View {
+        Form {
+            Section("Jump Sizes") {
+                Picker("Triples jump (+% of TM)", selection: Binding(
+                    get: { Int(round(settings.jokerTripleStepPct * 100)) },
+                    set: { settings.jokerTripleStepPct = Double($0) / 100.0 }
+                )) {
+                    ForEach([5, 7, 10], id: \.self) { Text("\($0)%").tag($0) }
+                }
+
+                Picker("Singles jump (+% of TM)", selection: Binding(
+                    get: { Int(round(settings.jokerSingleStepPct * 100)) },
+                    set: { settings.jokerSingleStepPct = Double($0) / 100.0 }
+                )) {
+                    ForEach([5, 10, 15], id: \.self) { Text("\($0)%").tag($0) }
+                }
+            }
+
+            Section("Caps") {
+                Picker("Max over TM", selection: Binding(
+                    get: { Int(round(settings.jokerMaxOverTMPct * 100)) },
+                    set: { settings.jokerMaxOverTMPct = Double($0) / 100.0 }
+                )) {
+                    ForEach([5, 10, 15, 20], id: \.self) { Text("\($0)%").tag($0) }
+                }
+                Text("This limits top Joker intensity to TM + cap. Example: 20% lets 95→115% (3s) or 100→120% (1s).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Button("Reset Joker Settings to Defaults", role: .destructive) {
+                    settings.jokerSetsEnabled   = true
+                    settings.jokerTrigger3s     = 6
+                    settings.jokerTrigger1s     = 2
+                    settings.jokerTripleStepPct = 0.05
+                    settings.jokerSingleStepPct = 0.10
+                    settings.jokerMaxOverTMPct  = 0.10
+                }
+            }
+        }
+        .navigationTitle("Joker Settings")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
