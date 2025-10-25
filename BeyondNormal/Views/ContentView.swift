@@ -695,7 +695,7 @@ struct ContentView: View {
             .id(weightsVersion)
             
             // Note Block
-            WorkoutNotesBlock(text: $workoutNotes)
+            WorkoutNotesBlock(text: $workoutNotes, isFocused: $notesFocused)
             
             // Summary block
             
