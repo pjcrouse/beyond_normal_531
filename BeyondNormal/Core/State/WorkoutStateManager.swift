@@ -327,3 +327,19 @@ extension WorkoutStateManager {
         state[jokerClosedKey(lift: lift, week: week)] == "true"
     }
 }
+
+// MARK: - 5s-week AMRAP toast de-dup (per workout)
+extension WorkoutStateManager {
+    private func fiveToastKey(lift: String, week: Int) -> String {
+        "\(lift)_w\(week)_five_amrap_toast_shown"
+    }
+
+    func markFiveWeekToastShown(lift: String, week: Int) {
+        state[fiveToastKey(lift: lift, week: week)] = "true"
+        saveState()
+    }
+
+    func hasShownFiveWeekToast(lift: String, week: Int) -> Bool {
+        state[fiveToastKey(lift: lift, week: week)] == "true"
+    }
+}
