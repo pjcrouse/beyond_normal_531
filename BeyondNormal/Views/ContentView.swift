@@ -100,9 +100,15 @@ struct ContentView: View {
         let label: String         // "Joker"
     }
 
-    @State private var jokerActive = false
-    @State private var jokerSets: [SetPrescription] = []
     @State private var showJokerFeedback = false  // only for .three after the first triple
+    @State private var localJokerSets: [SetPrescription] = []
+
+    private func reloadJokersForCurrent() {
+        localJokerSets = workoutState.getJokerSets(
+            lift: selectedLift.rawValue,
+            week: currentWeek
+        )
+    }
     
     private var isUpper: (Lift) -> Bool { { $0 == .bench || $0 == .press || $0 == .row } }
     private var isLower: (Lift) -> Bool { { $0 == .squat || $0 == .deadlift } }
@@ -447,6 +453,8 @@ struct ContentView: View {
                     if !activeLifts.contains(selectedLift) {
                         selectedLift = activeLifts.first ?? .bench
                     }
+                    
+                    reloadJokersForCurrent()
                 }
                 .onChange(of: settings.workoutsPerWeek) { _, _ in
                     if !activeLifts.contains(selectedLift) {
@@ -461,6 +469,8 @@ struct ContentView: View {
                 .onChange(of: selectedLift) { _, new in
                     liveRepsText = repsText(for: new)
                     workoutNotes = ""
+                    
+                    reloadJokersForCurrent()
                 }
                 .onChange(of: liveRepsText) { _, _ in
                     saveReps(liveRepsText, for: selectedLift)
@@ -481,6 +491,8 @@ struct ContentView: View {
                 .onChange(of: currentWeek) { _, _ in
                     liveRepsText = repsText(for: selectedLift)
                     workoutNotes = ""
+                    
+                    reloadJokersForCurrent()
                 }
                 .onReceive(implements.objectWillChange) { _ in weightsVersion &+= 1 }
                 // === collect tour target anchors from inside the NavigationStack ===
@@ -577,17 +589,20 @@ struct ContentView: View {
             )
             .id(weightsVersion)
             
-            // ⬇️ Add this block right AFTER WorkoutBlock(...).id(weightsVersion)
-            if jokerActive {
+            // Replace your current `if jokerActive { ... }` block with this:
+            let finished = workoutState.isWorkoutFinished(lift: selectedLift.rawValue, week: currentWeek)
+            let closed   = workoutState.isJokerClosed(lift: selectedLift.rawValue, week: currentWeek) // add helper per prior step
+            let canShowFeedback = !finished && !closed && showJokerFeedback
+
+            if !localJokerSets.isEmpty {
                 JokerSectionView(
-                    jokerSets: jokerSets,
-                    showFeedback: showJokerFeedback,
+                    jokerSets: localJokerSets,          // per-workout, persisted
+                    showFeedback: canShowFeedback,      // hide Fire/🗑️ when finished or closed
                     onFire: {
-                        // fire → add 100% TM triple and hide feedback
                         if let ctx = pendingJokerContext { jokerFeedbackFire(lift: ctx.lift) }
                     },
                     onDumpster: {
-                        // dumpster → hide feedback
+                        // Do NOT clear history—just close further progression
                         jokerFeedbackDumpster()
                     }
                 )
@@ -653,10 +668,13 @@ struct ContentView: View {
             // Summary block
             
             // Compute Joker volume right above the SummaryCard call
-            let jokerVol = Int(jokerSets.reduce(0.0) { $0 + ($1.weight * Double($1.reps)) })
+            let jokerVol = Int(
+                workoutState
+                    .getJokerSets(lift: selectedLift.rawValue, week: currentWeek)
+                    .reduce(0.0) { $0 + ($1.weight * Double($1.reps)) }
+            )
             let prNow = prAchievedThisSession(est: m.est)
             
-
             SummaryCard(
                 date: workoutEndDate ?? .now,
                 est1RM: m.est,
@@ -694,42 +712,48 @@ struct ContentView: View {
     }
     
     private func startJokers(with ctx: (lift: Lift, reps: Int, week: WeekKind)) {
-        let tm = tmFor(ctx.lift)
-        // Generate the full plan, but show only the first set now.
-        let sets = JokerSetGenerator.generate(
-            trainingMax: tm,
-            week: ctx.week,
-            params: jokerParamsFromSettings
-        )
+        // Block if finished or previously closed (dumpstered)
+        if workoutState.isWorkoutFinished(lift: ctx.lift.rawValue, week: currentWeek) { return }
+        if workoutState.isJokerClosed(lift: ctx.lift.rawValue, week: currentWeek) { return }
 
-        if let first = sets.first {
-            jokerSets = [first]
-            jokerActive = true
-            showJokerFeedback = true     // user taps 🔥 to add more
-            toast("Joker Sets Activated")
-        } else {
-            // No sets possible (e.g., week .five)
-            jokerActive = false
+        // Idempotent resume: if sets already exist, just load them, no feedback re-open
+        let existing = workoutState.getJokerSets(lift: ctx.lift.rawValue, week: currentWeek)
+        if !existing.isEmpty {
+            localJokerSets = existing
             showJokerFeedback = false
+            return
+        }
+
+        // Fresh start
+        let tm = tmFor(ctx.lift)
+        if let first = JokerSetGenerator.generate(trainingMax: tm, week: ctx.week, params: jokerParamsFromSettings).first {
+            workoutState.appendJokerSet(lift: ctx.lift.rawValue, week: currentWeek, set: first)
+            reloadJokersForCurrent()
+            // Only show feedback when allowed and not closed
+            showJokerFeedback = (ctx.week == .three)
+            if !allowTimerStarts { armTimers() }
+            startRest(timerRegularSec, fromUser: true)
         }
     }
     
     private func jokerFeedbackFire(lift: Lift) {
         guard let ctx = pendingJokerContext else { showJokerFeedback = false; return }
-        let tm = tmFor(ctx.lift)
 
-        if let next = JokerSetGenerator.next(
-            trainingMax: tm,
-            week: ctx.week,
-            params: jokerParamsFromSettings,
-            after: jokerSets
-        ) {
-            jokerSets.append(next)
-            // 🔔 Fire implies completing the previous Joker set — start MAIN rest
+        if workoutState.isWorkoutFinished(lift: ctx.lift.rawValue, week: currentWeek) { showJokerFeedback = false; return }
+        if workoutState.isJokerClosed(lift: ctx.lift.rawValue, week: currentWeek) { showJokerFeedback = false; return }
+
+        let tm = tmFor(ctx.lift)
+        let existing = workoutState.getJokerSets(lift: ctx.lift.rawValue, week: currentWeek)
+
+        if let next = JokerSetGenerator.next(trainingMax: tm, week: ctx.week, params: jokerParamsFromSettings, after: existing) {
+            workoutState.appendJokerSet(lift: ctx.lift.rawValue, week: currentWeek, set: next)
+            reloadJokersForCurrent()
             if !allowTimerStarts { armTimers() }
             startRest(timerRegularSec, fromUser: true)
-            // If there is no further next, hide feedback now.
-            if JokerSetGenerator.next(trainingMax: tm, week: ctx.week, params: jokerParamsFromSettings, after: jokerSets) == nil {
+
+            // Hide feedback when there is no further next
+            let updated = workoutState.getJokerSets(lift: ctx.lift.rawValue, week: currentWeek)
+            if JokerSetGenerator.next(trainingMax: tm, week: ctx.week, params: jokerParamsFromSettings, after: updated) == nil {
                 showJokerFeedback = false
             }
         } else {
@@ -737,37 +761,29 @@ struct ContentView: View {
         }
     }
 
+    // When user dumps the flow, stop offering more for THIS workout.
+    // Keep already-added Joker sets (they still “count”).
     private func jokerFeedbackDumpster() {
         showJokerFeedback = false
-        // 🗑️ Treat as completion too → MAIN rest
+        workoutState.setJokerClosed(lift: selectedLift.rawValue, week: currentWeek, closed: true)
+
+        // Normal “set complete → rest” behavior
         if !allowTimerStarts { armTimers() }
         startRest(timerRegularSec, fromUser: true)
     }
 
     private func addJokerTriple(tm: Double, percentOfTM: Double) {
         let w = calculator.round(tm * percentOfTM)
-        jokerSets.append(
-            SetPrescription(
-                kind: .joker,                      // ✅ required parameter
-                percentOfTM: percentOfTM,
-                reps: 3,
-                weight: w,
-                label: "Joker"
-            )
-        )
+        let set = SetPrescription.jokerTriple(percentOfTM: percentOfTM, weight: w)
+        workoutState.appendJokerSet(lift: selectedLift.rawValue, week: currentWeek, set: set)
+        reloadJokersForCurrent()
     }
 
     private func addJokerSingle(tm: Double, percentOfTM: Double) {
         let w = calculator.round(tm * percentOfTM)
-        jokerSets.append(
-            SetPrescription(
-                kind: .joker,                      // ✅ required parameter
-                percentOfTM: percentOfTM,
-                reps: 1,
-                weight: w,
-                label: "Joker"
-            )
-        )
+        let set = SetPrescription.jokerSingle(percentOfTM: percentOfTM, weight: w)
+        workoutState.appendJokerSet(lift: selectedLift.rawValue, week: currentWeek, set: set)
+        reloadJokersForCurrent()
     }
     
     // MARK: - Subviews
@@ -930,8 +946,9 @@ struct ContentView: View {
     private func evaluateAmrapTrigger(reps: Int, lift: Lift) {
         // Respect global setting
         guard settings.jokerSetsEnabled else { return }
-        // ⛔️ If Jokers are already active, never prompt again
-        guard !jokerActive else { return }
+        let alreadyHasJokers = !workoutState.getJokerSets(lift: selectedLift.rawValue, week: currentWeek).isEmpty
+        let closed = workoutState.isJokerClosed(lift: selectedLift.rawValue, week: currentWeek)
+        guard !alreadyHasJokers && !closed else { return }
         // Only main weeks 1..3
         guard let wk = weekKind(for: currentWeek) else { return }
 
@@ -995,12 +1012,8 @@ struct ContentView: View {
             }
         }
         
-        // NEW: Joker volume (from the UI-rendered jokerSets for this workout)
-        let jokerVol = jokerSets.reduce(0.0) { acc, s in
-            acc + (s.weight * Double(s.reps))
-        }
-        
-        let totalVol = Int(mainVol) + Int(bbbVol) + Int(assistVol) + Int(jokerVol)
+
+        let totalVol = Int(mainVol) + Int(bbbVol) + Int(assistVol)
         
         let top = currentScheme.main[2]
         let est: Double = {
@@ -1026,6 +1039,11 @@ struct ContentView: View {
     @State private var workoutEndDate: Date? = nil
     
     private func finishWorkout() {
+        let jokerVol = Int(
+            workoutState
+                .getJokerSets(lift: selectedLift.rawValue, week: currentWeek)
+                .reduce(0.0) { $0 + ($1.weight * Double($1.reps)) }
+        )
         if isWorkoutSaved(lift: selectedLift, week: currentWeek, cycle: currentCycle) {
             // Optional: give gentle feedback
             savedAlertText = "This \(selectedLift.label) workout for Week \(currentWeek), Cycle \(currentCycle) is already saved."
@@ -1036,11 +1054,12 @@ struct ContentView: View {
         let metrics = currentWorkoutMetrics()
         let liftLabel = selectedLift.label
 
+        let grandTotal = metrics.totalVol + jokerVol
         savedAlertText = String(
             format: "Logged %@ • Est 1RM %@ • Volume %@ lb",
             liftLabel,
             Int(metrics.est).formatted(.number),
-            metrics.totalVol.formatted(.number)
+            grandTotal.formatted(.number)
         )
 
         // Build the entry (week/cycle included)

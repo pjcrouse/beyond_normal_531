@@ -274,3 +274,56 @@ extension WorkoutStateManager {
         }
     }
 }
+
+// MARK: - Joker Sets per workout (lift+week)
+extension WorkoutStateManager {
+    private func jokerKey(lift: String, week: Int) -> String {
+        return "\(lift)_w\(week)_joker_sets"
+    }
+
+    /// Persist all joker sets for a given workout (overwrites existing)
+    func setJokerSets(lift: String, week: Int, sets: [SetPrescription]) {
+        let key = jokerKey(lift: lift, week: week)
+        if let data = try? JSONEncoder().encode(sets) {
+            state[key] = data.base64EncodedString()
+            saveState()
+        }
+    }
+
+    /// Append a single joker set to stored list
+    func appendJokerSet(lift: String, week: Int, set: SetPrescription) {
+        var existing = getJokerSets(lift: lift, week: week)
+        existing.append(set)
+        setJokerSets(lift: lift, week: week, sets: existing)
+    }
+
+    /// Read joker sets for a workout
+    func getJokerSets(lift: String, week: Int) -> [SetPrescription] {
+        let key = jokerKey(lift: lift, week: week)
+        guard let b64 = state[key], let data = Data(base64Encoded: b64) else { return [] }
+        return (try? JSONDecoder().decode([SetPrescription].self, from: data)) ?? []
+    }
+
+    /// Clear joker sets for a workout (e.g., when user taps 🗑️ on the first feedback)
+    func clearJokerSets(lift: String, week: Int) {
+        let key = jokerKey(lift: lift, week: week)
+        state.removeValue(forKey: key)
+        saveState()
+    }
+}
+
+// MARK: - Joker flow gating (per workout)
+extension WorkoutStateManager {
+    private func jokerClosedKey(lift: String, week: Int) -> String {
+        "\(lift)_w\(week)_joker_closed"
+    }
+
+    func setJokerClosed(lift: String, week: Int, closed: Bool) {
+        state[jokerClosedKey(lift: lift, week: week)] = closed ? "true" : "false"
+        saveState()
+    }
+
+    func isJokerClosed(lift: String, week: Int) -> Bool {
+        state[jokerClosedKey(lift: lift, week: week)] == "true"
+    }
+}
