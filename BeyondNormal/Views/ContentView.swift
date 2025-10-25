@@ -91,6 +91,8 @@ struct ContentView: View {
     @State private var showJokerOfferAlert = false
     @State private var pendingJokerContext: (lift: Lift, reps: Int, week: WeekKind)?
     
+    @State private var timerExpanded = false
+    
     // Rendered Joker prescriptions for today (lightweight, display-only)
     private struct JokerSet: Identifiable, Hashable {
         let id = UUID()
@@ -109,6 +111,8 @@ struct ContentView: View {
             week: currentWeek
         )
     }
+    
+    @State private var isTimerExpanded = false
     
     private var isUpper: (Lift) -> Bool { { $0 == .bench || $0 == .press || $0 == .row } }
     private var isLower: (Lift) -> Bool { { $0 == .squat || $0 == .deadlift } }
@@ -333,12 +337,12 @@ struct ContentView: View {
                 }
                 .tint(Color.brandAccent)
                 
-                // ⬇️ Mount the rest-timer pill at the very top (outside mainContent)
                 .safeAreaInset(edge: .top) {
-                    RestTimerPill(
+                    TimerDock(
                         timer: timer,
                         regular: settings.timerRegularSec,
                         bbb: settings.timerBBBSec,
+                        expanded: $timerExpanded,
                         onStart: { secs in startRest(secs, fromUser: true) },
                         onPause: { timer.pause() },
                         onReset: { timer.reset() }
