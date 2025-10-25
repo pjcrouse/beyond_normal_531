@@ -114,6 +114,19 @@ struct ContentView: View {
     
     @State private var isTimerExpanded = false
     
+    @State private var isProgrammaticRepsUpdate = false
+    
+    @State private var fiveToastKey: String = ""       // cycle-week-lift
+    @State private var fiveToastShown: Bool = false
+    
+    private func refreshFiveToastKey() {
+        let key = "\(currentCycle)-\(currentWeek)-\(selectedLift.rawValue)"
+        if key != fiveToastKey {
+            fiveToastKey = key
+            fiveToastShown = false
+        }
+    }
+    
     private var isUpper: (Lift) -> Bool { { $0 == .bench || $0 == .press || $0 == .row } }
     private var isLower: (Lift) -> Bool { { $0 == .squat || $0 == .deadlift } }
     
@@ -453,11 +466,14 @@ struct ContentView: View {
                     timer.allowStarts = false
                     allowTimerStarts = false
                     
+                    // ⬇️ Programmatic text update (do not trigger saveReps/evaluateAmrap)
+                    isProgrammaticRepsUpdate = true
                     liveRepsText = repsText(for: selectedLift)
                     if !activeLifts.contains(selectedLift) {
                         selectedLift = activeLifts.first ?? .bench
                     }
                     
+                    refreshFiveToastKey()
                     reloadJokersForCurrent()
                 }
                 .onChange(of: settings.workoutsPerWeek) { _, _ in
@@ -471,12 +487,21 @@ struct ContentView: View {
                     }
                 }
                 .onChange(of: selectedLift) { _, new in
+                    // 🛑 ensure any showing toast doesn’t re-mount
+                    showToast = false
+                    toastText = nil
+
+                    isProgrammaticRepsUpdate = true
                     liveRepsText = repsText(for: new)
                     workoutNotes = ""
-                    
+                    isProgrammaticRepsUpdate = false
+
+                    refreshFiveToastKey()
                     reloadJokersForCurrent()
                 }
                 .onChange(of: liveRepsText) { _, _ in
+                    // Only persist when the user typed, not when we programmatically set the text
+                    guard !isProgrammaticRepsUpdate else { return }
                     saveReps(liveRepsText, for: selectedLift)
                 }
                 .onChange(of: settings.tmSquat) { _, _ in weightsVersion += 1 }
@@ -493,9 +518,12 @@ struct ContentView: View {
                     }
                 }
                 .onChange(of: currentWeek) { _, _ in
+                    isProgrammaticRepsUpdate = true
                     liveRepsText = repsText(for: selectedLift)
                     workoutNotes = ""
-                    
+                    isProgrammaticRepsUpdate = false
+
+                    refreshFiveToastKey()
                     reloadJokersForCurrent()
                 }
                 .onReceive(implements.objectWillChange) { _ in weightsVersion &+= 1 }
@@ -944,15 +972,39 @@ struct ContentView: View {
     private func saveReps(_ text: String, for lift: Lift) {
         let r = Int(text) ?? 0
         workoutState.setAMRAP(lift: lift.rawValue, week: currentWeek, reps: r)
+
+        // 🔸 trigger Joker offer (for 3s/1s)
         evaluateAmrapTrigger(reps: r, lift: lift)
+
+        // 🔸 handle the 5s-week informational toast right here (on typing)
+        maybeShowFiveWeekAMRAPToast(reps: r)
+    }
+    
+    private func maybeShowFiveWeekAMRAPToast(reps: Int) {
+        // Only for 5s week
+        guard weekKind(for: currentWeek) == .five else { return }
+
+        // Your threshold for “big AMRAP” on 5s week.
+        // If you later add a setting, replace 10 with settings.jokerTrigger5s (or similar).
+        let threshold = 10
+        guard reps >= threshold else { return }
+
+        // Once per workout (cycle+week+lift)
+        guard !fiveToastShown else { return }
+
+        toast("Big AMRAP! On 5s week we keep it submax. Plan a TM bump next cycle (+10 lower / +5 upper).")
+        fiveToastShown = true
     }
     
     private func evaluateAmrapTrigger(reps: Int, lift: Lift) {
         // Respect global setting
         guard settings.jokerSetsEnabled else { return }
+
+        // Do not offer if this workout already has Jokers or was “closed”
         let alreadyHasJokers = !workoutState.getJokerSets(lift: selectedLift.rawValue, week: currentWeek).isEmpty
         let closed = workoutState.isJokerClosed(lift: selectedLift.rawValue, week: currentWeek)
         guard !alreadyHasJokers && !closed else { return }
+
         // Only main weeks 1..3
         guard let wk = weekKind(for: currentWeek) else { return }
 
@@ -965,8 +1017,8 @@ struct ContentView: View {
             showJokerOfferAlert = true
 
         case .five:
-            // No Jokers; gentle coaching nudge only
-            toast("Big AMRAP! On 5s week we keep it submax. Plan a TM bump next cycle (+10 lower / +5 upper).")
+            // No Joker offer here; purely informational toast handled in maybeShowFiveWeekAMRAPToast(reps:)
+            return
         }
     }
     
