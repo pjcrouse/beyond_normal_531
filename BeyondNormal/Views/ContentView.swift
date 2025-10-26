@@ -1079,6 +1079,9 @@ struct ContentView: View {
     @State private var workoutEndDate: Date? = nil
     
     private func finishWorkout() {
+        // Cancel/reset any active rest timers
+        timer.reset()
+
         let jokerVol = Int(
             workoutState
                 .getJokerSets(lift: selectedLift.rawValue, week: currentWeek)
