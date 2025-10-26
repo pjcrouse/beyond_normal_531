@@ -26,6 +26,8 @@ struct SettingsSheet: View {
 
     // Tour advance helper state
     @State private var tmAdvanceArmed = false
+    
+    @AppStorage(kTimerSystemSoundIDKey) private var selectedSystemSoundID: Int = kTimerSystemSoundIDDefault
 
     // 👇 Helpers can now refer to Field safely
     private func isTMField(_ f: Field?) -> Bool {
@@ -60,6 +62,7 @@ struct SettingsSheet: View {
                             loadingSection
                             bbbSection
                             restTimerSection
+                            timerSoundSection
 
                             // 🔥 Joker settings live INSIDE the form like everything else
                             jokerSettingsSection
@@ -268,6 +271,21 @@ struct SettingsSheet: View {
             Text("Tip: 240s = 4:00, 180s = 3:00")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+    
+    private var timerSoundSection: some View {
+        Section("Timer Sound") {
+            NavigationLink("Choose Timer Sound") {
+                SystemSoundPickerView()
+            }
+            HStack {
+                Text("Current")
+                Spacer()
+                Text("#\(selectedSystemSoundID == 0 ? kTimerSystemSoundIDDefault : selectedSystemSoundID)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

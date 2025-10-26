@@ -111,9 +111,7 @@ struct ContentView: View {
             week: currentWeek
         )
     }
-    
-    @State private var isTimerExpanded = false
-    
+
     @State private var isProgrammaticRepsUpdate = false
     
     @State private var fiveToastKey: String = ""       // cycle-week-lift
@@ -695,7 +693,7 @@ struct ContentView: View {
             .id(weightsVersion)
             
             // Note Block
-            WorkoutNotesBlock(text: $workoutNotes)
+            WorkoutNotesBlock(text: $workoutNotes, isFocused: $notesFocused)
             
             // Summary block
             
@@ -804,20 +802,6 @@ struct ContentView: View {
         startRest(timerRegularSec, fromUser: true)
     }
 
-    private func addJokerTriple(tm: Double, percentOfTM: Double) {
-        let w = calculator.round(tm * percentOfTM)
-        let set = SetPrescription.jokerTriple(percentOfTM: percentOfTM, weight: w)
-        workoutState.appendJokerSet(lift: selectedLift.rawValue, week: currentWeek, set: set)
-        reloadJokersForCurrent()
-    }
-
-    private func addJokerSingle(tm: Double, percentOfTM: Double) {
-        let w = calculator.round(tm * percentOfTM)
-        let set = SetPrescription.jokerSingle(percentOfTM: percentOfTM, weight: w)
-        workoutState.appendJokerSet(lift: selectedLift.rawValue, week: currentWeek, set: set)
-        reloadJokersForCurrent()
-    }
-    
     // MARK: - Subviews
     
     private var headerView: some View {
@@ -1095,6 +1079,9 @@ struct ContentView: View {
     @State private var workoutEndDate: Date? = nil
     
     private func finishWorkout() {
+        // Cancel/reset any active rest timers
+        timer.reset()
+
         let jokerVol = Int(
             workoutState
                 .getJokerSets(lift: selectedLift.rawValue, week: currentWeek)
@@ -1259,8 +1246,6 @@ struct ContentView: View {
             toast("Week \(next - 1) complete → Week \(next)")
 
         case .cycleAdvanced(let from, let to, let lines):
-            // If you moved TM mutation out of compute, do it here instead:
-            // let changes = applyTMProgressionForNewCycle(from: from)
             let styleShort = (settings.progressionStyle == .classic) ? "Classic" : "Auto"
 
             currentCycle = to
