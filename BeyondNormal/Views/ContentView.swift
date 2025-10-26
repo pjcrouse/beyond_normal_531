@@ -14,6 +14,9 @@ extension UIApplication {
 
 struct ContentView: View {
     @EnvironmentObject private var settings: ProgramSettings
+    
+    @State private var showFormulaPicker = false
+    
     // Training inputs
     private var roundTo: Double { settings.roundTo }
     private var bbbPct: Double { settings.bbbPercent }
@@ -498,6 +501,7 @@ struct ContentView: View {
                     reloadJokersForCurrent()
                 }
                 .onChange(of: liveRepsText) { _, _ in
+                    print("✍️ onChange liveRepsText =", liveRepsText, "prog?", isProgrammaticRepsUpdate)
                     // Only persist when the user typed, not when we programmatically set the text
                     guard !isProgrammaticRepsUpdate else { return }
                     saveReps(liveRepsText, for: selectedLift)
@@ -955,6 +959,7 @@ struct ContentView: View {
     
     private func saveReps(_ text: String, for lift: Lift) {
         let r = Int(text) ?? 0
+        print("✅ saveReps ->", r, "for", lift.label)
         workoutState.setAMRAP(lift: lift.rawValue, week: currentWeek, reps: r)
 
         // 🔸 trigger Joker offer (for 3s/1s)
@@ -1057,9 +1062,14 @@ struct ContentView: View {
         
         let top = currentScheme.main[2]
         let est: Double = {
-            guard top.amrap else { return 0 }
+            guard top.amrap else {
+                print("📐 1RM: skipped (top set is not AMRAP). week=\(currentWeek) lift=\(selectedLift.label)")
+                return 0
+            }
             let amrapReps = workoutState.getAMRAP(lift: selectedLift.rawValue, week: currentWeek)
             let w = calculator.round(tmSel * top.pct)
+            
+            print("📐 1RM: inputs → weight=\(Int(w)) reps=\(amrapReps) pct=\(top.pct) TM=\(Int(tmSel)) formula=\(settings.oneRMFormula)")
             
             let r = estimate1RM(
                 weight: w,
@@ -1070,6 +1080,8 @@ struct ContentView: View {
                 refuseAboveHardCap: true,
                 roundTo: roundTo
             )
+            
+            print("📐 1RM: result → e1RM=\(Int(r.e1RM.rounded())) (raw=\(r.e1RM))")
             return r.e1RM
         }()
         
