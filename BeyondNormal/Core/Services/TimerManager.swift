@@ -2,10 +2,13 @@ import Foundation
 import Combine
 import UserNotifications
 import UIKit
+import AudioToolbox
 
 final class TimerManager: ObservableObject {
     @Published var remaining: Int = 0
     @Published var isRunning: Bool = false
+    
+    private var pendingNotificationId: String?
 
     /// Prevents timers from starting until explicitly armed by ContentView
     var allowStarts: Bool = false
@@ -17,19 +20,50 @@ final class TimerManager: ObservableObject {
 
     func start(seconds: Int) {
         guard allowStarts else { return }
+        // Clean up any previous state
+        timer?.invalidate()
+        timer = nil
+        if let id = pendingNotificationId {
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])
+            pendingNotificationId = nil
+        }
+
         endTime = Date().addingTimeInterval(TimeInterval(seconds))
         remaining = seconds
         isRunning = true
-        scheduleNotification(in: seconds)
-        startTicking()
+
+        scheduleNotification(in: seconds)     // background path
+        startTicking()                        // foreground ticking
     }
 
     func pause() {
+        guard isRunning else { return }
         isRunning = false
-        endTime = nil
         timer?.invalidate()
         timer = nil
-        cancelNotification()
+
+        // Freeze remaining so we can resume later
+        if let end = endTime {
+            remaining = max(1, Int(end.timeIntervalSinceNow.rounded()))
+        }
+        endTime = nil
+
+        // Paused = no alert should fire
+        if let id = pendingNotificationId {
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])
+            pendingNotificationId = nil
+        }
+    }
+
+    func resume() {
+        // Only resume if we have a remaining value > 0 and are not already running
+        guard !isRunning, remaining > 0 else { return }
+
+        endTime = Date().addingTimeInterval(TimeInterval(remaining))
+        isRunning = true
+
+        scheduleNotification(in: remaining)   // replace any previous pending
+        startTicking()
     }
 
     func reset() {
@@ -38,10 +72,19 @@ final class TimerManager: ObservableObject {
         remaining = 0
         timer?.invalidate()
         timer = nil
-        cancelNotification()
+
+        // True reset: clear any pending alert
+        if let id = pendingNotificationId {
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])
+            pendingNotificationId = nil
+        }
     }
 
     // MARK: - Private helpers
+    private func playCompletionSound() {
+        // Strong, decisive swoosh that fits your brand vibe
+        AudioServicesPlaySystemSound(SystemSoundID(1028)) // Jo is 31
+    }
 
     private func startTicking() {
         timer?.invalidate()
@@ -66,22 +109,35 @@ final class TimerManager: ObservableObject {
         timer?.invalidate()
         timer = nil
         UINotificationFeedbackGenerator().notificationOccurred(.success)
+        playCompletionSound()
     }
 
     private func scheduleNotification(in seconds: Int) {
+        // Replace prior pending request (if any)
+        if let id = pendingNotificationId {
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])
+            pendingNotificationId = nil
+        }
+
         let content = UNMutableNotificationContent()
-        content.title = "Rest finished"
-        content.body = "Time to lift!"
+        content.title = "Rest complete"
+        content.body  = "Time to lift."
         content.sound = .default
+        if #available(iOS 15.0, *) {
+            content.interruptionLevel = .timeSensitive
+        }
 
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(seconds), repeats: false)
-        let request = UNNotificationRequest(identifier: "rest-timer", content: content, trigger: trigger)
-
-        UNUserNotificationCenter.current().add(request)
+        let id = "bn-rest-\(UUID().uuidString)"
+        pendingNotificationId = id
+        let req = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
+        UNUserNotificationCenter.current().add(req)
     }
-
+    
     private func cancelNotification() {
-        UNUserNotificationCenter.current()
-            .removePendingNotificationRequests(withIdentifiers: ["rest-timer"])
+        if let id = pendingNotificationId {
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])
+            pendingNotificationId = nil
+        }
     }
 }
