@@ -56,6 +56,9 @@ public struct SetRow: View {
 }
 
 public struct AMRAPRow: View {
+    @EnvironmentObject private var settings: ProgramSettings
+    @State private var showFormulaPicker = false
+    
     public let label: String
     public let weight: Double
     public let perSide: [Double]
@@ -142,8 +145,26 @@ public struct AMRAPRow: View {
                                     }
                                 }
                             }
-                            FormulaTag(formula: currentFormula)
-                                .foregroundColor(.brandAccent)
+                            Button {
+                                showFormulaPicker = true
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            } label: {
+                                // Use the live setting so the chip updates immediately
+                                FormulaTag(formula: settings.oneRMFormula)
+                                    .foregroundColor(.brandAccent)
+                            }
+                            .buttonStyle(.plain)
+                            .confirmationDialog("Select 1RM Formula",
+                                                isPresented: $showFormulaPicker,
+                                                titleVisibility: .visible) {
+                                ForEach(OneRepMaxFormula.allCases, id: \.self) { f in
+                                    Button(f.displayName) {
+                                        settings.oneRMFormula = f
+                                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                                    }
+                                }
+                                Button("Cancel", role: .cancel) { }
+                            }
                         }
                         if let note = capNote, !note.isEmpty {
                             Text(note)
