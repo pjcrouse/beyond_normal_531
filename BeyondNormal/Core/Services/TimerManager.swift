@@ -82,8 +82,9 @@ final class TimerManager: ObservableObject {
 
     // MARK: - Private helpers
     private func playCompletionSound() {
-        // Strong, decisive swoosh that fits your brand vibe
-        AudioServicesPlaySystemSound(SystemSoundID(1028)) // Jo is 31
+        let id = UserDefaults.standard.object(forKey: kTimerSystemSoundIDKey) as? Int
+                ?? kTimerSystemSoundIDDefault
+        AudioServicesPlaySystemSound(SystemSoundID(id))
     }
 
     private func startTicking() {
