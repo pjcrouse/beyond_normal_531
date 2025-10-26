@@ -2,8 +2,6 @@
 //  BeyondNormal
 
 import SwiftUI
-// If you have separate targets/modules, uncomment the next line:
-// import CoreModels
 
 struct JokerSectionView: View {
     let jokerSets: [SetPrescription]     // ← use the shared model
