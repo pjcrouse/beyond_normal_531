@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import UserNotifications
 import UIKit
+import AudioToolbox
 
 final class TimerManager: ObservableObject {
     @Published var remaining: Int = 0
@@ -29,7 +30,6 @@ final class TimerManager: ObservableObject {
         endTime = nil
         timer?.invalidate()
         timer = nil
-        cancelNotification()
     }
 
     func reset() {
@@ -42,6 +42,10 @@ final class TimerManager: ObservableObject {
     }
 
     // MARK: - Private helpers
+    private func playCompletionSound() {
+        // Strong, decisive swoosh that fits your brand vibe
+        AudioServicesPlaySystemSound(SystemSoundID(1057))   // “Mail Sent”
+    }
 
     private func startTicking() {
         timer?.invalidate()
@@ -70,13 +74,18 @@ final class TimerManager: ObservableObject {
 
     private func scheduleNotification(in seconds: Int) {
         let content = UNMutableNotificationContent()
-        content.title = "Rest finished"
-        content.body = "Time to lift!"
-        content.sound = .default
+        content.title = "Rest complete"
+        content.body  = "Time to lift."
+        content.sound = .default                       // keep default while debugging
+        if #available(iOS 15.0, *) {
+            content.interruptionLevel = .timeSensitive // ⬅️ helps with Focus modes
+        }
 
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(seconds), repeats: false)
-        let request = UNNotificationRequest(identifier: "rest-timer", content: content, trigger: trigger)
 
+        // Use a unique id so requests don’t overwrite each other
+        let id = "bn-rest-\(UUID().uuidString)"
+        let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request)
     }
 
