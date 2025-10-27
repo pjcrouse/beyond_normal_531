@@ -14,6 +14,7 @@ extension UIApplication {
 
 struct ContentView: View {
     @EnvironmentObject private var settings: ProgramSettings
+    @Environment(\.scenePhase) private var scenePhase
     
     @State private var showFormulaPicker = false
     
@@ -548,6 +549,14 @@ struct ContentView: View {
         }
         // Optional: make tour available further down if needed later
         .environmentObject(tour)
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                timer.resyncOnForeground()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            timer.resyncOnForeground()
+        }
     }
     
     // MARK: - Main scroll content (split out)
@@ -1191,13 +1200,10 @@ struct ContentView: View {
     }
         
     private func startRest(_ seconds: Int, fromUser: Bool) {
-        // Only arm on user action
-        if fromUser {
-            armTimers() // sets allowTimerStarts = true and timer.allowStarts = true
-        }
-        // Never start unless both gates are open
-        guard allowTimerStarts, timer.allowStarts else { return }
-        timer.start(seconds: seconds)
+        if fromUser { armTimers() }
+        guard allowTimerStarts, timer.allowStarts, seconds > 0 else { return }
+        let kind: TimerManager.Kind = (seconds == settings.timerBBBSec) ? .bbb : .regular
+        timer.start(seconds: seconds, kind: kind)
     }
     
     // MARK: - Auto-advance helpers (history-derived)
