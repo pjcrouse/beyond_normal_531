@@ -33,7 +33,13 @@ struct SummaryCard: View {
     ) {
         self.date = date
         self.est1RM = est1RM
-        self.totals = Totals(total: totals.total, main: totals.main, bbb: totals.bbb, assist: totals.assist, joker: joker)
+        self.totals = Totals(
+            total: totals.total,
+            main: totals.main,
+            bbb: totals.bbb,
+            assist: totals.assist,
+            joker: joker
+        )
         self.focusLift = focusLift
         self.prAchieved = prAchieved
     }
@@ -56,13 +62,21 @@ struct SummaryCard: View {
                 .font(.subheadline.weight(.semibold))
                 .padding(.top, 2)
 
-            // Breakdown line(s)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Main: \(formatted(totals.main)) lb  •  BBB: \(formatted(totals.bbb)) lb  •  Assist: \(formatted(totals.assist)) lb")
+            // Breakdown lines (Joker row only appears if > 0, so no blank gap)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Main: \(formatted(totals.main)) lb")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                if let jk = totals.joker {
+                Text("BBB: \(formatted(totals.bbb)) lb")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text("Assist: \(formatted(totals.assist)) lb")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if let jk = totals.joker, jk > 0 {
                     Text("Joker: \(formatted(jk)) lb")
                         .font(.caption)
                         .foregroundStyle(.secondary)
