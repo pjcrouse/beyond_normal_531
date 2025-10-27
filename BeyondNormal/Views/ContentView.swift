@@ -773,7 +773,7 @@ struct ContentView: View {
             workoutState.appendJokerSet(lift: ctx.lift.rawValue, week: currentWeek, set: first)
             reloadJokersForCurrent()
             // Only show feedback when allowed and not closed
-            showJokerFeedback = (ctx.week == .three)
+            showJokerFeedback = (ctx.week == .three || ctx.week == .one)
             if !allowTimerStarts { armTimers() }
             startRest(timerRegularSec, fromUser: true)
         }
