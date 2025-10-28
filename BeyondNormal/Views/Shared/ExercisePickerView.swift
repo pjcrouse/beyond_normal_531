@@ -124,7 +124,7 @@ struct ExercisePickerView: View {
                         shareURL = url
                     } catch {
                         #if DEBUG
-                        print("Export All failed: \(error)")
+                        dlog("Export All failed:", error)
                         #endif
                     }
                 } label: {

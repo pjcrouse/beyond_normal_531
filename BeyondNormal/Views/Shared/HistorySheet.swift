@@ -207,7 +207,7 @@ struct HistorySheet: View {
             try WorkoutStore.shared.delete(id: entry.id)
             entries.removeAll { $0.id == entry.id }
         } catch {
-            print("⚠️ Failed to delete workout: \(error.localizedDescription)")
+            dlog("Failed to delete workout:", error.localizedDescription)
             deleteErrorMessage = "Failed to delete workout: \(error.localizedDescription)"
             showDeleteError = true
         }
@@ -230,8 +230,6 @@ struct HistorySheet: View {
         \(e.lift): \(dateString)
         1RM \(formatted1RM) lb • Volume \(formattedVolume) lb\(notesLine)
         """
-        
-        print("DEBUG SHARE SUMMARY:\n\(summaryText)")
         
         // ✅ Capture the final payload in the item that drives the sheet
         activeShare = ShareRequest(context: .summary(summaryText))
