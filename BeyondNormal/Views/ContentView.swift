@@ -121,6 +121,10 @@ struct ContentView: View {
     @State private var fiveToastKey: String = ""       // cycle-week-lift
     @State private var fiveToastShown: Bool = false
     
+    @State private var nextCycle: Int = 1
+    @State private var progressionStyle: ProgressionStyle = .classic
+    @State private var tmChanges: [(name: String, old: Double, new: Double)] = []
+    
     private func refreshFiveToastKey() {
         let key = "\(currentCycle)-\(currentWeek)-\(selectedLift.rawValue)"
         if key != fiveToastKey {
@@ -191,6 +195,46 @@ struct ContentView: View {
         }
     }
     
+    /// Mutates settings TMs and returns raw (name, old, new) tuples for the summary sheet.
+    private func applyTMProgressionForNewCycleRaw(from oldCycle: Int) -> [(name: String, old: Double, new: Double)] {
+        var changes: [(name: String, old: Double, new: Double)] = []
+        let liftsToProgress = activeLifts
+
+        // capture before values
+        var before: [Lift: Double] = [:]
+        for lift in liftsToProgress {
+            before[lift] = getTM(lift)
+        }
+
+        switch settings.progressionStyle {
+        case .classic:
+            for lift in liftsToProgress {
+                let bumped = getTM(lift) + classicBumpAmount(for: lift)
+                setTM(lift, bumped)
+            }
+
+        case .auto:
+            for lift in liftsToProgress {
+                let best = PRStore.shared.bestByCycle[PRKey(cycle: oldCycle, lift: lift.label)] ?? 0
+                guard best > 0 else { continue }
+                let targetTM = (Double(best) * Double(settings.autoTMPercent) / 100.0).rounded()
+                let currentTM = getTM(lift)
+                let delta = min(max(targetTM - currentTM, 0), autoMaxDelta(for: lift))
+                setTM(lift, currentTM + delta)
+            }
+        }
+
+        // build raw tuple list after mutation
+        for lift in liftsToProgress {
+            if let oldVal = before[lift] {
+                let newVal = getTM(lift)
+                changes.append((name: lift.label, old: oldVal, new: newVal))
+            }
+        }
+        return changes
+    }
+    
+    // look into obsoleting this
     // Returns per-lift TM change lines you can show in a toast.
     private func applyTMProgressionForNewCycle(from oldCycle: Int) -> [String] {
         var lines: [String] = []
@@ -399,10 +443,11 @@ struct ContentView: View {
                 }
                 .sheet(isPresented: $showCycleSummary) {
                     CycleSummaryView(
-                        fromCycle: cycleAdvancedFrom,
-                        toCycle: currentCycle,
-                        style: settings.progressionStyle,
-                        lines: cycleSummaryLines
+                        fromCycle: currentCycle,
+                        toCycle: nextCycle,
+                        style: progressionStyle,
+                        rawChanges: tmChanges,      // the raw tuple list, not formatted strings
+                        calculator: calculator
                     )
                     .presentationDetents([.medium, .large])
                     .preferredColorScheme(.dark)
@@ -1035,9 +1080,21 @@ struct ContentView: View {
         func mainSetVol(_ idx: Int) -> Double {
             let s = scheme.main[idx]
             let w = calculator.round(tmSel * s.pct)
-            let reps = s.amrap ? Double(max(workoutState.getAMRAP(lift: selectedLift.rawValue, week: currentWeek), 0)) : Double(s.reps)
+            let reps: Double
+            if s.amrap && idx == 2 {
+                // prefer live text for the top set
+                let rNow = min(15,
+                    Int(liveRepsText).flatMap { max(0, $0) } ??
+                    workoutState.getAMRAP(lift: selectedLift.rawValue, week: currentWeek)
+                )
+                reps = Double(rNow)
+            } else {
+                reps = s.amrap ? Double(max(workoutState.getAMRAP(lift: selectedLift.rawValue, week: currentWeek), 0))
+                               : Double(s.reps)
+            }
             return w * reps
         }
+        
         let mainVol = Int(mainSetVol(0) + mainSetVol(1) + mainSetVol(2))
         
         let defaultBBBW = calculator.round(tmSel * bbbPct)
@@ -1068,23 +1125,31 @@ struct ContentView: View {
         let totalVol = Int(mainVol) + Int(bbbVol) + Int(assistVol)
         
         let top = currentScheme.main[2]
+
         let est: Double = {
-            guard top.amrap else {
-                return 0
-            }
-            let amrapReps = workoutState.getAMRAP(lift: selectedLift.rawValue, week: currentWeek)
+            // top set must be AMRAP
+            guard top.amrap else { return 0 }
+
+            // weight for the AMRAP top set
             let w = calculator.round(tmSel * top.pct)
-               
+
+            // prefer in-flight text, fall back to persisted; hard-cap = 15
+            let repsNow = min(15,
+                Int(liveRepsText).flatMap { max(0, $0) } ??
+                workoutState.getAMRAP(lift: selectedLift.rawValue, week: currentWeek)
+            )
+
+            guard repsNow > 0 else { return 0 }
+
             let r = estimate1RM(
                 weight: w,
-                reps: amrapReps,
+                reps: repsNow,
                 formula: settings.oneRMFormula,
                 softWarnAt: 11,
                 hardCap: 15,
                 refuseAboveHardCap: true,
                 roundTo: roundTo
             )
-            
             return r.e1RM
         }()
         
@@ -1188,9 +1253,14 @@ struct ContentView: View {
     }
         
     private func tmChangeLine(_ name: String, _ old: Double, _ new: Double) -> String {
-        let d = Int(new.rounded()) - Int(old.rounded())
+        // Convert raw TM values to plate-rounded TM values
+        let oldR = Int(calculator.round(old))
+        let newR = Int(calculator.round(new))
+
+        let d = newR - oldR
         let arrow = d >= 0 ? "↑" : "↓"
-        return "\(name): \(Int(old.rounded())) → \(Int(new.rounded())) \(arrow)\(abs(d))"
+
+        return "\(name): \(oldR) → \(newR) \(arrow)\(abs(d))"
     }
         
     private func startRest(_ seconds: Int, fromUser: Bool) {
@@ -1231,10 +1301,10 @@ struct ContentView: View {
         if isCycleCompleteInHistory() {
             let old = currentCycle
             // Prepare the TM changes to show after we perform the advance
-            let changes = applyTMProgressionForNewCycle(from: old) // NOTE: this mutates TMs now—if you prefer, compute a preview first and move mutation into performAdvance
+             // NOTE: this mutates TMs now—if you prefer, compute a preview first and move mutation into performAdvance
             // Revert the TM change in compute step if you need a pure "preview" (optional).
             // For simplicity, keep behavior: we’ll re-run apply in performAdvance; or you can refactor apply to return preview.
-            return .cycleAdvanced(from: old, to: old + 1, lines: changes)
+            return .cycleAdvanced(from: old, to: old + 1, lines: [])
         }
 
         // Week advance?
@@ -1257,22 +1327,26 @@ struct ContentView: View {
             // Optional toast; keep or remove if you dislike it:
             toast("Week \(next - 1) complete → Week \(next)")
 
-        case .cycleAdvanced(let from, let to, let lines):
+        case .cycleAdvanced(let from, let to, _):
             let styleShort = (settings.progressionStyle == .classic) ? "Classic" : "Auto"
 
+            // 1) Mutate TMs and capture raw changes for the sheet
+            progressionStyle = settings.progressionStyle
+            tmChanges = applyTMProgressionForNewCycleRaw(from: from)
+            nextCycle = to
+
+            // 2) Move to new cycle/week and clear state
             currentCycle = to
             currentWeek = 1
             clearAllCompletionFor(week: 1)
 
-            // Reset PR window for new cycle
+            // 3) Reset PR window for new cycle
             PRStore.shared.resetCycle(currentCycle)
 
+            // 4) UI
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             toast("Cycle \(from) complete → Cycle \(to) (\(styleShort))")
 
-            // Show your existing celebration sheet
-            cycleAdvancedFrom = from
-            cycleSummaryLines = lines
             showCycleSummary = true
         }
     }
@@ -1329,36 +1403,38 @@ struct ContentView: View {
         }
     }
     
-    private struct CycleSummaryView: View {
+    struct CycleSummaryView: View {
+        @Environment(\.dismiss) private var dismiss
+
         let fromCycle: Int
         let toCycle: Int
         let style: ProgressionStyle
-        let lines: [String]  // e.g., ["Squat: 315 → 325 ↑10", "Bench: 225 → 230 ↑5"]
+        let rawChanges: [(name: String, old: Double, new: Double)]
+        let calculator: PlateCalculator
+
+        @State private var lines: [String] = []
 
         var body: some View {
             NavigationStack {
                 VStack(spacing: 16) {
-                    // 🔥 Flame icon in brand orange
+
                     Image(systemName: "flame.fill")
                         .font(.system(size: 42))
                         .symbolRenderingMode(.monochrome)
                         .foregroundColor(Color(hex: "#e55722"))
 
-                    // 🧱 Headline
                     Text("Cycle \(fromCycle) complete!")
                         .font(.title2.bold())
                         .foregroundColor(Color(hex: "#e55722"))
 
-                    // 🧩 Subheadline
                     Text("Welcome to Cycle \(toCycle) \(styleLabel)")
                         .font(.headline)
-                        .foregroundColor(Color(hex: "#2c7f7a")) // teal secondary tone
+                        .foregroundColor(Color(hex: "#2c7f7a"))
 
                     Divider()
                         .overlay(Color(hex: "#e55722").opacity(0.15))
                         .padding(.vertical, 4)
 
-                    // 📈 TM change lines
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(lines, id: \.self) { line in
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -1367,7 +1443,6 @@ struct ContentView: View {
                                     .symbolRenderingMode(.monochrome)
                                     .foregroundColor(Color(hex: "#e55722"))
 
-                                // Highlight the delta (last token) in orange
                                 let parts = line.split(separator: " ")
                                 if let last = parts.last {
                                     let prefix = parts.dropLast().joined(separator: " ")
@@ -1390,12 +1465,11 @@ struct ContentView: View {
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 16)
-                            .strokeBorder(Color(hex: "#e55722").opacity(0.1), lineWidth: 1)
+                            .stroke(Color(hex: "#e55722").opacity(0.1), lineWidth: 1)
                     )
 
                     Spacer(minLength: 8)
 
-                    // 🪶 Footer
                     Text("Keep momentum. Deload completed and TMs updated — time to build again.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -1403,6 +1477,15 @@ struct ContentView: View {
                 .padding()
                 .navigationTitle("Training Max Updates")
                 .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Done") { dismiss() }
+                    }
+                }
+            }
+            .interactiveDismissDisabled(false)
+            .task {
+                lines = rawChanges.map { tmChangeLine($0.name, $0.old, $0.new) }
             }
         }
 
@@ -1411,6 +1494,14 @@ struct ContentView: View {
             case .classic: return "(Classic +5/+10)"
             case .auto:    return "(Auto from PRs)"
             }
+        }
+
+        private func tmChangeLine(_ name: String, _ old: Double, _ new: Double) -> String {
+            let oldR = Int(calculator.round(old))
+            let newR = Int(calculator.round(new))
+            let d = newR - oldR
+            let arrow = d >= 0 ? "↑" : "↓"
+            return "\(name): \(oldR) → \(newR) \(arrow)\(abs(d))"
         }
     }
     
