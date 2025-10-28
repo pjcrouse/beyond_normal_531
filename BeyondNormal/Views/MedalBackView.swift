@@ -14,6 +14,9 @@ private struct EngravedText: View {
                 .blur(radius: 1.2)
                 .offset(x: 0.7, y: 1.0)
                 .blendMode(.multiply)
+                .lineLimit(1)                 // keep single line
+                .minimumScaleFactor(0.70)     // shrink down to 70% before truncation
+                .truncationMode(.tail)        // then add ellipsis
 
             Text(text)
                 .font(font)
@@ -22,6 +25,9 @@ private struct EngravedText: View {
                 .blur(radius: 0.9)
                 .offset(x: -0.7, y: -1.0)
                 .blendMode(.screen)
+                .lineLimit(1)
+                .minimumScaleFactor(0.70)
+                .truncationMode(.tail)
 
             Text(text)
                 .font(font)
@@ -29,6 +35,9 @@ private struct EngravedText: View {
                 .foregroundStyle(.gray.opacity(0.25))
                 .blendMode(.overlay)
                 .opacity(0.7)
+                .lineLimit(1)
+                .minimumScaleFactor(0.70)
+                .truncationMode(.tail)
         }
         .compositingGroup()
     }
@@ -41,6 +50,9 @@ struct MedalBackView: View {
     let date: Date
 
     var body: some View {
+        // Sanitize & cap the user name (requires Core/Logic/NameRules.swift)
+        let safeUser = limitedGraphemes(sanitizedDisplayName(user), max: 24).uppercased()
+
         ZStack {
             Image("medal_back_base")
                 .resizable()
@@ -48,7 +60,7 @@ struct MedalBackView: View {
 
             VStack(spacing: 14) {
                 EngravedText(
-                    text: "EARNED BY \(user.uppercased())",
+                    text: "EARNED BY \(safeUser)",
                     font: .system(size: 32, weight: .semibold, design: .rounded),
                     tracking: 2
                 )
@@ -68,7 +80,7 @@ struct MedalBackView: View {
             .padding(.horizontal, 90)
             .padding(.top, 20)
         }
-        .clipShape(Circle())          // <- trims to circular alpha
-        .background(Color.clear)      // <- no black matte
+        .clipShape(Circle())          // trims to circular alpha
+        .background(Color.clear)      // no black matte
     }
 }

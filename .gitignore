@@ -30,3 +30,4 @@ Carthage/Build/
 
 # SwiftLint, etc.
 .swiftlint.yml
+dev.zip

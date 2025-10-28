@@ -62,7 +62,7 @@ final class ProgramSettings: ObservableObject {
     @AppStorage(Key.progressionStyle)  private var progressionStyleRaw: String = ProgressionStyle.classic.rawValue
     @AppStorage(Key.autoTMPercent)     private var autoTMPercentRaw: Int = 90
 
-    @AppStorage(Key.workoutsPerWeek)   private var workoutsPerWeekRaw: Int = 4
+    @AppStorage(Key.workoutsPerWeek)   private var workoutsPerWeekRaw: Int = 3
     @AppStorage(Key.fourthLiftRaw)     private var fourthLiftRawRaw: String = "row"
 
     @AppStorage(Key.assistSquatID)     private var assistSquatIDRaw: String = "split_squat"
@@ -84,7 +84,14 @@ final class ProgramSettings: ObservableObject {
     @AppStorage("jokerTrigger1s") var jokerTrigger1s: Int = 2  // Week 3 (1s): prompt at ≥2
 
     // MARK: - App-facing (Published)
-    @Published var userDisplayName: String = ""
+    @Published var userDisplayName: String = "" {
+        didSet {
+            // hard cap: 24 graphemes
+            let clean = sanitizedDisplayName(userDisplayName)
+            let capped = limitedGraphemes(clean, max: 24)
+            if capped != userDisplayName { userDisplayName = capped }
+        }
+    }
 
     @Published var tmSquat: Double = 315
     @Published var tmBench: Double = 225
@@ -104,7 +111,7 @@ final class ProgramSettings: ObservableObject {
     @Published var progressionStyle: ProgressionStyle = .classic
     @Published var autoTMPercent: Int = 90
 
-    @Published var workoutsPerWeek: Int = 4
+    @Published var workoutsPerWeek: Int = 3
     @Published var fourthLiftRaw: String = "row"
 
     @Published var assistSquatID: String = "split_squat"
@@ -120,7 +127,8 @@ final class ProgramSettings: ObservableObject {
     init() {
         let d = UserDefaults.standard
 
-        userDisplayName   = d.string(forKey: Key.userDisplayName) ?? ""
+        let raw = d.string(forKey: Key.userDisplayName) ?? ""
+        userDisplayName = limitedGraphemes(sanitizedDisplayName(raw), max: 24)
 
         tmSquat           = d.object(forKey: Key.tmSquat)       as? Double ?? 315
         tmBench           = d.object(forKey: Key.tmBench)       as? Double ?? 225
@@ -144,7 +152,7 @@ final class ProgramSettings: ObservableObject {
 
         autoTMPercent     = d.object(forKey: Key.autoTMPercent) as? Int ?? 90
 
-        workoutsPerWeek   = d.object(forKey: Key.workoutsPerWeek) as? Int ?? 4
+        workoutsPerWeek   = d.object(forKey: Key.workoutsPerWeek) as? Int ?? 3
         fourthLiftRaw     = d.string(forKey: Key.fourthLiftRaw) ?? "row"
 
         assistSquatID     = d.string(forKey: Key.assistSquatID) ?? "split_squat"
@@ -164,7 +172,7 @@ final class ProgramSettings: ObservableObject {
 
     // MARK: - Persist back to @AppStorage
     private func sync() {
-        userDisplayNameRaw   = userDisplayName
+        userDisplayNameRaw   = limitedGraphemes(sanitizedDisplayName(userDisplayName), max: 24)
 
         tmSquatRaw           = tmSquat
         tmBenchRaw           = tmBench

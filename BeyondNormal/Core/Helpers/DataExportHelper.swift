@@ -100,7 +100,7 @@ struct DataExportHelper {
             presenter?.present(activityVC, animated: true)
             
         } catch {
-            print("Failed to share data: \(error)")
+            dlog("Failed to share data:", error)
             completion?(false)
         }
     }

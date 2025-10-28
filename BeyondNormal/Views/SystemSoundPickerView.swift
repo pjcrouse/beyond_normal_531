@@ -33,7 +33,6 @@ struct SystemSoundPickerView: View {
 
                         Button {
                             AudioServicesPlaySystemSound(SystemSoundID(id)) // preview
-                            print("🔊 Previewing system sound #\(id)")
                         } label: {
                             Image(systemName: "speaker.wave.2.fill")
                         }
@@ -44,7 +43,6 @@ struct SystemSoundPickerView: View {
                     .onTapGesture {
                         selectedID = id
                         AudioServicesPlaySystemSound(SystemSoundID(id))   // confirm ping
-                        print("✅ Selected system sound #\(id)")
                     }
                 }
             }
@@ -52,7 +50,6 @@ struct SystemSoundPickerView: View {
             Section {
                 Button {
                     AudioServicesPlaySystemSound(SystemSoundID(selectedID))
-                    print("🧪 Testing selected sound #\(selectedID)")
                 } label: {
                     Label("Test Selected", systemImage: "play.circle.fill")
                 }
