@@ -142,7 +142,20 @@ struct WorkoutBlock: View {
         )
 
         if s2.amrap {
-            let r = est1RM(selectedLift, w2)
+            // Prefer the in-flight text; fall back to persisted state
+            let repsNow = min(15, Int(liveRepsText).flatMap { max(0, $0) }
+                ?? workoutState.getAMRAP(lift: selectedLift.rawValue, week: currentWeek))
+
+            let r = estimate1RM(
+                weight: w2,
+                reps: repsNow,
+                formula: currentFormula,      // already passed in from ContentView
+                softWarnAt: 11,
+                hardCap: 15,
+                refuseAboveHardCap: true,
+                roundTo: roundTo               // already in scope
+            )
+
             let capText: String? = {
                 switch r.note {
                 case .none: return nil

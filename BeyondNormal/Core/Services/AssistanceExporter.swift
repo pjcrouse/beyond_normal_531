@@ -59,7 +59,7 @@ enum AssistanceExporter {
                 urls.append(url)
             } catch {
                 #if DEBUG
-                print("AssistanceExporter: failed to export \(dto.exerciseName): \(error)")
+                dlog("AssistanceExporter: failed to export \(dto.exerciseName):", error)
                 #endif
             }
         }
