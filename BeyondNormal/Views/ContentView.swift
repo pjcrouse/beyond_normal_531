@@ -629,6 +629,21 @@ struct ContentView: View {
                 topLine: currentScheme.topLine,
                 topWeight: topWeight
             )
+            if isLocked {
+                Label("Locked preview — finish Week \(highestUnlockedWeek) to unlock.",
+                      systemImage: "lock.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(Color.brandPaper)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 14)
+                .frame(maxWidth: .infinity)
+                .background(
+                    Capsule()
+                        .fill(Color.brandAccent)
+                )
+                .padding(.horizontal)
+                .padding(.top, 4)
+            }
             
             PRDisclosureView(
                 expanded: $showPRs,
@@ -880,32 +895,53 @@ struct ContentView: View {
     }
     
     private var finishButton: some View {
-        let alreadySaved = isWorkoutSaved(lift: selectedLift, week: currentWeek, cycle: currentCycle)
-        let locked       = !purchases.isPro
+        let alreadySaved   = isWorkoutSaved(lift: selectedLift, week: currentWeek, cycle: currentCycle)
+        let paywallLocked  = !purchases.isPro
+        let weekLocked     = isLocked   // ← from the browse-but-read-only gating
 
         return Button {
-            guard !alreadySaved else { return }        // don’t do anything if already saved
-            if locked {
-                showPaywall = true                     // not Pro → show paywall
+            // Don’t do anything if already saved
+            guard !alreadySaved else { return }
+
+            if paywallLocked {
+                // Not Pro → show paywall (always tappable, even on locked weeks)
+                showPaywall = true
+            } else if weekLocked {
+                // Pro but future week → block and explain
+                toast("Locked: finish Week \(highestUnlockedWeek) first.")
             } else {
-                finishWorkout()                        // Pro → finish as normal
+                // Pro + current/unlocked week → finish as normal
+                finishWorkout()
             }
         } label: {
             Label(
-                alreadySaved ? "Already Saved" :
-                (locked ? "Unlock to Finish" : "Finish Workout"),
-                systemImage: alreadySaved ? "checkmark.seal.fill" :
-                              (locked ? "lock.fill" : "checkmark.seal.fill")
+                // Title
+                alreadySaved
+                    ? "Already Saved"
+                    : (paywallLocked
+                       ? "Unlock to Finish"
+                       : (weekLocked ? "Finish (Locked)" : "Finish Workout")),
+                // Icon
+                systemImage:
+                    alreadySaved
+                    ? "checkmark.seal.fill"
+                    : (paywallLocked
+                       ? "lock.fill"
+                       : (weekLocked ? "lock.fill" : "checkmark.seal.fill"))
             )
             .font(.headline)
         }
         .buttonStyle(.borderedProminent)
-        // Keep the visual “saved” state dimmed; keep locked state fully tappable (to show paywall)
-        .disabled(alreadySaved)
-        .opacity(alreadySaved ? 0.55 : 1.0)
+        // Saved and week-locked should both look disabled; paywall stays tappable
+        .disabled(alreadySaved || weekLocked)
+        .opacity((alreadySaved || weekLocked) ? 0.55 : 1.0)
         .accessibilityLabel(
-            alreadySaved ? "Workout already saved" :
-            (locked ? "Unlock to finish workout" : "Finish workout")
+            alreadySaved
+                ? "Workout already saved"
+                : (paywallLocked
+                   ? "Unlock to finish workout"
+                   : (weekLocked ? "Finish workout locked until previous weeks are completed"
+                                 : "Finish workout"))
         )
     }
     
@@ -977,6 +1013,10 @@ struct ContentView: View {
         Binding(
             get: { self.workoutState.getSetComplete(lift: self.selectedLift.rawValue, week: self.currentWeek, set: num) },
             set: { newValue in
+                guard !isLocked else {
+                    toast("This week is locked. Finish Week \(highestUnlockedWeek) first.")
+                    return
+                }
                 self.workoutState.setSetComplete(lift: self.selectedLift.rawValue, week: self.currentWeek, set: num, value: newValue)
             }
         )
@@ -986,6 +1026,10 @@ struct ContentView: View {
         Binding(
             get: { self.workoutState.getAssistComplete(lift: self.selectedLift.rawValue, week: self.currentWeek, set: n) },
             set: { newValue in
+                guard !isLocked else {
+                    toast("This week is locked. Finish Week \(highestUnlockedWeek) first.")
+                    return
+                }
                 self.workoutState.setAssistComplete(lift: self.selectedLift.rawValue, week: self.currentWeek, set: n, value: newValue)
             }
         )
@@ -1011,6 +1055,11 @@ struct ContentView: View {
     }
     
     private func saveReps(_ text: String, for lift: Lift) {
+        // Read-only in locked weeks
+        guard !isLocked else {
+            toast("This week is locked. Finish Week \(highestUnlockedWeek) first.")
+            return
+        }
         let r = Int(text) ?? 0
         workoutState.setAMRAP(lift: lift.rawValue, week: currentWeek, reps: r)
 
@@ -1038,6 +1087,7 @@ struct ContentView: View {
     }
     
     private func evaluateAmrapTrigger(reps: Int, lift: Lift) {
+        guard !isLocked else { return } // don't even offer on locked
         // Respect global setting
         guard settings.jokerSetsEnabled else { return }
 
@@ -1159,6 +1209,10 @@ struct ContentView: View {
     @State private var workoutEndDate: Date? = nil
     
     private func finishWorkout() {
+        if isLocked {
+            toast("This week is locked. Finish Week \(highestUnlockedWeek) first.")
+            return
+        }
         // Cancel/reset any active rest timers
         timer.reset()
 
@@ -1264,6 +1318,10 @@ struct ContentView: View {
     }
         
     private func startRest(_ seconds: Int, fromUser: Bool) {
+        if fromUser && isLocked {
+            toast("This week is locked. Finish Week \(highestUnlockedWeek) first.")
+            return
+        }
         if fromUser { armTimers() }
         guard allowTimerStarts, timer.allowStarts, seconds > 0 else { return }
         let kind: TimerManager.Kind = (seconds == settings.timerBBBSec) ? .bbb : .regular
@@ -1284,6 +1342,26 @@ struct ContentView: View {
             }
         }
         return completed.isSuperset(of: mains)
+    }
+    
+    /// Highest week unlocked for the current cycle:
+    /// Completing Week 1 unlocks 2, completing Week 2 unlocks 3, etc.
+    /// Never returns > 4.
+    private var highestUnlockedWeek: Int {
+        var unlocked = 1
+        for w in 1...3 {
+            if isWeekCompleteInHistory(week: w) {
+                unlocked = min(w + 1, 4)
+            } else {
+                break
+            }
+        }
+        return unlocked
+    }
+
+    /// Is the *currently viewed* week locked (read-only)?
+    private var isLocked: Bool {
+        currentWeek > highestUnlockedWeek
     }
 
     // Cycle complete if weeks 1..3 are complete (change to 1..4 if deload is required).
